@@ -1,0 +1,157 @@
+{
+  "phase": 0,
+  "purpose": "Baseline inventory for Java-shaped UTA surfaces before Python support refactoring.",
+  "fixtures": {
+    "python3": "tests/fixtures/python_projects/py3_flat_project",
+    "python2": "tests/fixtures/python_projects/py2_legacy_project"
+  },
+  "surfaces": [
+    {
+      "surface": "uta run",
+      "paths": ["uta/cli.py", "tests/test_cli.py"],
+      "current_java_assumption": "Run state and help are class/FQN and Maven oriented.",
+      "required_python_treatment": "Add language and target aliases while preserving Java options.",
+      "owner_phase": 2
+    },
+    {
+      "surface": "uta tasks create",
+      "paths": ["uta/cli.py", "uta/tasks/manager.py", "tests/test_tasks.py"],
+      "current_java_assumption": "Creates tasks from class_fqns and Maven module filters.",
+      "required_python_treatment": "Accept language and path/symbol targets via TargetIdentity.",
+      "owner_phase": 2
+    },
+    {
+      "surface": "uta tasks create-manifest",
+      "paths": ["uta/cli.py", "tests/test_tasks.py"],
+      "current_java_assumption": "Manifest shape is classes/class_fqns oriented.",
+      "required_python_treatment": "Accept targets with language, sourcePath, symbol, and granularity.",
+      "owner_phase": 2
+    },
+    {
+      "surface": "uta tasks enqueue",
+      "paths": ["uta/cli.py", "scripts/enqueue.sh"],
+      "current_java_assumption": "Queue entry defaults to Java/Maven style task creation.",
+      "required_python_treatment": "Add language and Python target options or document Java-only mode.",
+      "owner_phase": 2
+    },
+    {
+      "surface": "uta tasks show/watch/summary/export/dashboard/report",
+      "paths": ["uta/cli.py", "uta/tasks/render.py", "uta/tasks/manager.py", "uta/output/reporter.py"],
+      "current_java_assumption": "Displays class rows and class FQNs.",
+      "required_python_treatment": "Render target metadata and avoid Java-only labels for non-Java tasks.",
+      "owner_phase": 1
+    },
+    {
+      "surface": "uta tasks reprioritize-class",
+      "paths": ["uta/cli.py", "uta/tasks/manager.py"],
+      "current_java_assumption": "Child task command is named class-only.",
+      "required_python_treatment": "Keep alias and add target-oriented command.",
+      "owner_phase": 2
+    },
+    {
+      "surface": "uta resume-gates",
+      "paths": ["uta/cli.py", "uta/maven/jacoco.py", "uta/maven/pitest.py"],
+      "current_java_assumption": "Resumes Maven/Jacoco/PIT gates for Java class FQNs.",
+      "required_python_treatment": "Keep explicitly Java-only until a Python gate resume path exists.",
+      "owner_phase": 4
+    },
+    {
+      "surface": "uta scan",
+      "paths": ["uta/cli.py", "uta/engine/source_selection.py", "tests/test_git_scanner.py"],
+      "current_java_assumption": "Scans Java files under src/main/java.",
+      "required_python_treatment": "Add language-aware source discovery and Python source filters.",
+      "owner_phase": 3
+    },
+    {
+      "surface": "uta parse",
+      "paths": ["uta/cli.py", "uta/language/java/parse/java_parser.py", "tests/test_java_parser.py"],
+      "current_java_assumption": "Parses Java source through the Java parse binding.",
+      "required_python_treatment": "Keep Java parsing Java-only and add Python parser/context equivalents.",
+      "owner_phase": 3
+    },
+    {
+      "surface": "uta query-index",
+      "paths": ["uta/cli.py", "tests/test_cli.py"],
+      "current_java_assumption": "Requires class_fqn and Java parsed graph.",
+      "required_python_treatment": "Route query-index through language adapter and support Python path/symbol targets.",
+      "owner_phase": 2
+    },
+    {
+      "surface": "bin/uta-query-index",
+      "paths": ["bin/uta-query-index"],
+      "current_java_assumption": "Wrapper only forwards Java query-index options.",
+      "required_python_treatment": "Forward language and target options while keeping Java default behavior.",
+      "owner_phase": 8
+    },
+    {
+      "surface": "scripts/enqueue.sh",
+      "paths": ["scripts/enqueue.sh"],
+      "current_java_assumption": "Examples are Java task enqueue examples.",
+      "required_python_treatment": "Add Python examples/options or mark script Java-only.",
+      "owner_phase": 8
+    },
+    {
+      "surface": "scripts/start_daemon.sh",
+      "paths": ["scripts/start_daemon.sh"],
+      "current_java_assumption": "Runtime readiness is Java task oriented.",
+      "required_python_treatment": "Document Python runtime variables and keep Java startup unchanged.",
+      "owner_phase": 8
+    },
+    {
+      "surface": "scripts/start_ci_plugin.sh",
+      "paths": ["scripts/start_ci_plugin.sh"],
+      "current_java_assumption": "CI plugin startup assumes Maven enforcement path.",
+      "required_python_treatment": "Add Python enforcer config checks after backend exists.",
+      "owner_phase": 8
+    },
+    {
+      "surface": "scripts/deploy_single_host.sh",
+      "paths": ["scripts/deploy_single_host.sh"],
+      "current_java_assumption": "Deploy examples and smoke commands create Java tasks.",
+      "required_python_treatment": "Add DB migration and Python runtime smoke instructions.",
+      "owner_phase": 10
+    },
+    {
+      "surface": "scripts/setup-fetchcode.py",
+      "paths": ["scripts/setup-fetchcode.py", "tests/test_setup_fetchcode.py"],
+      "current_java_assumption": "Dependency preparation focuses on Maven/API jars.",
+      "required_python_treatment": "Allow Python repos to skip Maven setup without warning or failure.",
+      "owner_phase": 8
+    },
+    {
+      "surface": "ci plugin enforcement/report/repair",
+      "paths": ["uta/ci_plugin/enforcement.py", "uta/ci_plugin/service.py", "uta/ci_plugin/reporting.py"],
+      "current_java_assumption": "Maven enforcer output drives report parsing and Java repair tasks.",
+      "required_python_treatment": "Parse Python evidence and route repair tasks to python_enforcer targets.",
+      "owner_phase": 7
+    },
+    {
+      "surface": "ci auto-push",
+      "paths": ["uta/ci_plugin/auto_push.py", "tests/test_ci_auto_push_guard.py"],
+      "current_java_assumption": "Allows Java generated test/resource paths.",
+      "required_python_treatment": "Allow generated Python tests only and reject production Python edits.",
+      "owner_phase": 7
+    },
+    {
+      "surface": "learning recorder/summary",
+      "paths": ["uta/learning/recorder.py", "uta/learning/summary.py"],
+      "current_java_assumption": "Records are keyed by class_fqn.",
+      "required_python_treatment": "Key learning by language and target_id while preserving Java records.",
+      "owner_phase": 4
+    },
+    {
+      "surface": "opencode retrospective hints",
+      "paths": ["uta/prompts/loader.py", "uta/prompts/plan_tests.txt", "docs/token_opt_phase2.md"],
+      "current_java_assumption": "Some prompt and retrospective hints are Maven/Mockito specific.",
+      "required_python_treatment": "Scope hints by language before they reach Python prompts.",
+      "owner_phase": 4
+    },
+    {
+      "surface": "e2e harness",
+      "paths": ["tests/e2e_repo_paths.py", "tests/test_pipeline_e2e.py"],
+      "current_java_assumption": "Real-repo E2E helpers only model Java repos/modules.",
+      "required_python_treatment": "Add staged Python 3/Python 2 repo config and optional real-repo env vars.",
+      "owner_phase": 9
+    }
+  ]
+}

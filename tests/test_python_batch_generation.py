@@ -1,0 +1,907 @@
+import subprocess
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from uta.cli import main
+from uta.engine.languages import RawTargetSelection, default_registry
+from uta.prompts.loader import render_prompt_split
+from uta.language.python.batch import (
+    PythonBatchGenerationResult,
+    generated_test_path,
+    run_python_batch_generation,
+    render_generated_test_file,
+    write_generated_test_file,
+)
+from uta.language.python.verification.runner import CoverageSummary, MutationSummary, PythonVerificationResult
+from uta.graph.nodes import ProviderRateLimitError
+from uta.tasks.manager import TaskManager
+from uta.tasks.render import build_status_payload, html_for_payload
+
+
+def test_python_prompt_bundle_is_language_owned():
+    registry = default_registry()
+
+    java_bundle = registry.prompt_bundle("java")
+    python_bundle = registry.prompt_bundle("python")
+
+    assert java_bundle.plan == "plan_tests"
+    assert java_bundle.generate == "generate_test"
+    assert python_bundle.plan == "python_plan_tests"
+    assert python_bundle.generate == "python_generate_test"
+    assert python_bundle.fix_compile == "python_fix_compile"
+    assert python_bundle.fix_coverage == "python_fix_coverage"
+    assert python_bundle.fix_mutations == "python_fix_mutations"
+
+
+def test_python_repair_prompts_render_with_language_specific_context(tmp_path):
+    context_md = tmp_path / "forecast.context.md"
+    context_md.write_text("# context\n", encoding="utf-8")
+    kwargs = dict(
+        target_id="pysymbol:jobs/forecast.py::forecast_for_store",
+        display_name="jobs/forecast.py::forecast_for_store",
+        source_path="jobs/forecast.py",
+        symbol="forecast_for_store",
+        generated_test_path="tests/uta_generated/test_jobs_forecast.py",
+        context_abs=str(context_md),
+        context_json_abs=str(tmp_path / "forecast.json"),
+        index_query_command="uta query-index --repo . --language python --target jobs/forecast.py::forecast_for_store --json-output",
+        compile_errors="SyntaxError: invalid syntax",
+        coverage_diagnostics="line 12 missing",
+        mutation_diagnostics="SURVIVED jobs/forecast.py:12 replace return value",
+        coverage_gate=95,
+        mutation_gate=100,
+    )
+
+    for prompt_name in ("python_fix_compile", "python_fix_coverage", "python_fix_mutations"):
+        stable, volatile = render_prompt_split(prompt_name, **kwargs)
+        rendered = stable + volatile
+        assert "pytest" in rendered
+        assert "Do not edit production Python files" in rendered
+        assert "tests/uta_generated/test_jobs_forecast.py" in rendered
+        assert "jobs/forecast.py::forecast_for_store" in rendered
+
+
+def test_python_generated_test_path_is_deterministic_under_uta_generated():
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/app/ad_measure.py::parse_fee_rules")
+    )
+
+    assert generated_test_path(target) == "tests/uta_generated/test_jobs_app_ad_measure.py"
+    assert generated_test_path(target) == generated_test_path(target)
+
+
+def test_python_generated_test_writer_refuses_non_uta_owned_file(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    target = default_registry().adapter_for("python").normalize_target(RawTargetSelection(target="jobs/forecast.py"))
+    existing = repo / generated_test_path(target)
+    existing.parent.mkdir(parents=True)
+    existing.write_text("def test_existing():\n    pass\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not UTA-owned"):
+        write_generated_test_file(repo, target, "def test_new():\n    pass\n")
+
+
+def test_python_generated_test_writer_updates_uta_owned_file(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+
+    first = render_generated_test_file(target, body="def test_first():\n    assert True\n")
+    second = render_generated_test_file(target, body="def test_second():\n    assert True\n")
+    path = write_generated_test_file(repo, target, first)
+    same_path = write_generated_test_file(repo, target, second)
+
+    assert same_path == path
+    text = path.read_text(encoding="utf-8")
+    assert "UTA_TARGET_ID: pysymbol:jobs/forecast.py::forecast_for_store" in text
+    assert "def test_second" in text
+    assert "def test_first" not in text
+
+
+def test_python_generated_test_writer_wraps_raw_body_with_ownership_header(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    target = default_registry().adapter_for("python").normalize_target(RawTargetSelection(target="jobs/forecast.py"))
+
+    path = write_generated_test_file(repo, target, "def test_raw_body():\n    assert True\n")
+
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("# Generated by UTA. Safe to update.")
+    assert "UTA_TARGET_ID: pyfile:jobs/forecast.py" in text
+    assert "def test_raw_body" in text
+
+
+def test_python_generation_prompt_renders_context_and_import_safety(tmp_path):
+    context_md = tmp_path / "forecast.context.md"
+    context_md.write_text("# Python Target Context\n", encoding="utf-8")
+    context_json = tmp_path / "forecast.json"
+    context_json.write_text("{}", encoding="utf-8")
+
+    stable, volatile = render_prompt_split(
+        "python_generate_test",
+        target_id="pysymbol:jobs/forecast.py::forecast_for_store",
+        display_name="jobs/forecast.py::forecast_for_store",
+        source_path="jobs/forecast.py",
+        symbol="forecast_for_store",
+        generated_test_path="tests/uta_generated/test_jobs_forecast.py",
+        context_abs=str(context_md),
+        context_json_abs=str(context_json),
+        index_query_command="uta query-index --repo . --language python --target jobs/forecast.py::forecast_for_store --json-output",
+        syntax_version="python3",
+        parser_backend="tree_sitter",
+        side_effect_hints=["env line 7: os.environ"],
+        changed_line_hints=["jobs/forecast.py:12 in `forecast_for_store`"],
+        companion_files=["tests/test_forecast.py"],
+    )
+    rendered = stable + volatile
+
+    assert "pytest" in rendered
+    assert "tests/uta_generated/test_jobs_forecast.py" in rendered
+    assert str(context_md) in rendered
+    assert "uta query-index --repo . --language python" in rendered
+    assert "Do not import target modules during planning" in rendered
+    assert "Keep exploration bounded" in rendered
+    assert "Ignore any external `[search-mode]`" in rendered
+    assert "Do not launch background agents" in rendered
+    assert "Do not probe the runtime" in rendered
+    assert "Do not use `pytest.importorskip`" in rendered
+    assert "CI CHANGED LINES TO COVER" in rendered
+    assert "jobs/forecast.py:12 in `forecast_for_store`" in rendered
+    assert "monkeypatch" in rendered
+    assert "os.environ" in rendered
+
+
+class _FakePythonOpenCodeClient:
+    def __init__(self, repo_path=None):
+        self.repo_path = repo_path
+        self.prompts = []
+        self.sessions = []
+
+    def create_session(self, model_id=None, provider_id=None):
+        session_id = f"ses_{len(self.sessions) + 1}"
+        self.sessions.append(session_id)
+        return session_id
+
+    def send_message_split(self, session_id, stable_prefix, volatile_tail, model_id=None):
+        self.prompts.append((session_id, stable_prefix + volatile_tail))
+        return {}
+
+    def poll_completion(self, session_id, timeout=600, on_update=None):
+        return {
+            "type": "completed",
+            "result": "```python\ndef test_generated_forecast():\n    assert True\n```",
+        }
+
+    def analyze_session_tokens(self, session_id):
+        return {
+            "session_id": session_id,
+            "main_model_tokens": {"input": 20, "output": 5, "reasoning": 1, "cache_read": 7, "cache_write": 0, "total": 33},
+            "small_model_tokens": {"input": 0, "output": 0, "reasoning": 0, "cache_read": 0, "cache_write": 0, "total": 0},
+            "other_model_tokens": {"input": 0, "output": 0, "reasoning": 0, "cache_read": 0, "cache_write": 0, "total": 0},
+            "total_tokens": {"input": 20, "output": 5, "reasoning": 1, "cache_read": 7, "cache_write": 0, "total": 33},
+        }
+
+    def analyze_session_retrospect(self, session_id):
+        return {
+            "session_id": session_id,
+            "hints": ["Python target pysymbol:jobs/forecast.py::forecast_for_store generated via fake client."],
+        }
+
+
+class _UnsafePythonOpenCodeClient(_FakePythonOpenCodeClient):
+    def poll_completion(self, session_id, timeout=600, on_update=None):
+        source = self.repo_path / "jobs" / "forecast.py"
+        source.write_text("def forecast_for_store(store_id):\n    return store_id + 1\n", encoding="utf-8")
+        return {
+            "type": "completed",
+            "result": "```python\ndef test_generated_forecast():\n    assert True\n```",
+        }
+
+
+class _DirectGeneratedFilePythonOpenCodeClient(_FakePythonOpenCodeClient):
+    def poll_completion(self, session_id, timeout=600, on_update=None):
+        generated = self.repo_path / "tests" / "uta_generated" / "test_jobs_forecast.py"
+        generated.parent.mkdir(parents=True, exist_ok=True)
+        generated.write_text(
+            "def test_directly_written_forecast():\n    assert True\n",
+            encoding="utf-8",
+        )
+        return {"type": "completed", "result": "Created tests/uta_generated/test_jobs_forecast.py"}
+
+
+class _TimeoutAfterDirectGeneratedFilePythonOpenCodeClient(_DirectGeneratedFilePythonOpenCodeClient):
+    def poll_completion(self, session_id, timeout=600, on_update=None):
+        super().poll_completion(session_id, timeout=timeout, on_update=on_update)
+        return {"type": "timeout", "reason": "OpenCode timed out after writing the generated test"}
+
+
+class _RateLimitedPythonOpenCodeClient(_FakePythonOpenCodeClient):
+    def poll_completion(self, session_id, timeout=600, on_update=None):
+        return {
+            "type": "rate_limited",
+            "result": "",
+            "rate_limit": {
+                "provider_id": "token-pool",
+                "model_id": "gpt-5.5",
+                "message": "usage limit reached",
+                "retry_after_seconds": 120,
+            },
+        }
+
+
+class _ProsePythonOpenCodeClient(_FakePythonOpenCodeClient):
+    def poll_completion(self, session_id, timeout=600, on_update=None):
+        return {"type": "completed", "result": "Reading the context and then I will write tests."}
+
+
+def _init_git_repo(repo):
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "config", "user.email", "uta@example.test"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "UTA Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=repo, check=True, capture_output=True, text=True)
+
+
+def _passing_python_verification(repo_path, target, test_paths, **kwargs):
+    return PythonVerificationResult(
+        status="passed",
+        reason_code="passed",
+        tests_pass=True,
+        coverage=CoverageSummary(covered=2, total=2, rate=100.0, gate=80.0, passed=True, xml_path="coverage.xml"),
+        mutation=MutationSummary(
+            runtime_lane="mutmut-modern",
+            generated=2,
+            killed=2,
+            survived=0,
+            no_coverage=0,
+            rate=100.0,
+            gate=70.0,
+            passed=True,
+        ),
+    )
+
+
+def _mutation_failing_python_verification(repo_path, target, test_paths, **kwargs):
+    return PythonVerificationResult(
+        status="failed",
+        reason_code="mutation_gate_failed",
+        tests_pass=True,
+        coverage=CoverageSummary(covered=2, total=2, rate=100.0, gate=80.0, passed=True, xml_path="coverage.xml"),
+        mutation=MutationSummary(
+            runtime_lane="mutmut-modern",
+            generated=2,
+            killed=1,
+            survived=1,
+            no_coverage=0,
+            rate=50.0,
+            gate=70.0,
+            passed=False,
+        ),
+    )
+
+
+def test_python_batch_generation_runs_coverage_repair_round(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+    calls = {"count": 0}
+
+    def verify_then_pass(repo_path, target, test_paths, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return PythonVerificationResult(
+                status="failed",
+                reason_code="coverage_gate_failed",
+                tests_pass=True,
+                coverage=CoverageSummary(
+                    covered=1,
+                    total=2,
+                    rate=50.0,
+                    gate=95.0,
+                    passed=False,
+                    xml_path="coverage.xml",
+                ),
+                message="Python coverage 50.00% is below gate 95.00%",
+            )
+        return _passing_python_verification(repo_path, target, test_paths, **kwargs)
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        client_factory=lambda repo_path: fake,
+        verification_runner=verify_then_pass,
+        coverage_gate=95,
+    )
+
+    assert calls["count"] == 2
+    assert result.results[target.target_id]["status"] == "PASS"
+    assert len(fake.prompts) == 2
+    assert "does not meet the coverage gate" in fake.prompts[1][1]
+    assert "coverage=50.0000 gate=95.0000" in fake.prompts[1][1]
+    assert result.results[target.target_id]["session_ids"] == ["ses_1", "ses_2"]
+
+
+def test_python_batch_generation_repairs_mutation_backend_import_failure(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "src" / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="src/jobs/forecast.py::forecast_for_store")
+    )
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+    calls = {"count": 0}
+
+    def verify_backend_then_pass(repo_path, target, test_paths, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return PythonVerificationResult(
+                status="failed",
+                reason_code="mutation_backend_failed",
+                tests_pass=True,
+                coverage=CoverageSummary(
+                    covered=2,
+                    total=2,
+                    rate=100.0,
+                    gate=95.0,
+                    passed=True,
+                    xml_path="coverage.xml",
+                ),
+                message="Failed trampoline hit. Module name starts with `src.`",
+            )
+        return _passing_python_verification(repo_path, target, test_paths, **kwargs)
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        client_factory=lambda repo_path: fake,
+        verification_runner=verify_backend_then_pass,
+        coverage_gate=95,
+    )
+
+    assert calls["count"] == 2
+    assert result.results[target.target_id]["status"] == "PASS"
+    assert "does not import, collect, or compile" in fake.prompts[1][1]
+    assert "Module name starts with `src.`" in fake.prompts[1][1]
+
+
+def test_python_batch_generation_writes_tests_and_updates_task_reporting(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=[target], language="python")
+    manager.mark_running(task_id, stage="startup")
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        task_id=task_id,
+        task_db_path=db_path,
+        client_factory=lambda repo_path: fake,
+        verification_runner=_passing_python_verification,
+    )
+
+    generated_path = repo / "tests" / "uta_generated" / "test_jobs_forecast.py"
+    assert result.results[target.target_id]["test_file_path"] == generated_path.relative_to(repo).as_posix()
+    assert generated_path.exists()
+    generated_text = generated_path.read_text(encoding="utf-8")
+    assert "UTA_TARGET_ID: pysymbol:jobs/forecast.py::forecast_for_store" in generated_text
+    assert "def test_generated_forecast" in generated_text
+    assert "Do not import target modules during planning" in fake.prompts[0][1]
+    assert "uta query-index --repo . --language python" in fake.prompts[0][1]
+    assert "Do not launch background agents" in fake.prompts[0][1]
+    assert "do not import modules with a `src.` prefix" in fake.prompts[0][1]
+    assert "do not create a synthetic alias package" in fake.prompts[0][1]
+    assert "TARGET SCORING" in fake.prompts[0][1]
+    assert "forecast_for_store" in fake.prompts[0][1]
+    assert result.results[target.target_id]["target_score"]["language"] == "python"
+    assert result.results[target.target_id]["plan_validation"]["breadth"]["known_methods"] == 1
+    learning_path = repo / ".uta_cache" / "learning" / "pysymbol_jobs_forecast.py__forecast_for_store.jsonl"
+    assert learning_path.exists()
+
+    payload = build_status_payload(manager.db, task_id)
+    assert payload["task"]["status"] == "COMPLETED"
+    assert payload["task"]["language"] == "python"
+    assert payload["classes"][0]["status"] == "PASS"
+    assert payload["classes"][0]["coverage_line"] == 100.0
+    assert payload["classes"][0]["mutation_score"] == 100.0
+    assert payload["classes"][0]["target_display_name"] == "jobs/forecast.py::forecast_for_store"
+    assert payload["classes"][0]["input_tokens"] == 20
+    assert payload["classes"][0]["output_tokens"] == 5
+    assert payload["classes"][0]["reasoning_tokens"] == 1
+    assert payload["task"]["input_tokens"] == 20
+    assert payload["task"]["provider_cost_usd"] > 0
+    assert payload["task"]["session_ids"] == ["ses_1"]
+    assert "Targets" in html_for_payload(payload)
+    assert "Total Tokens (all targets)" in html_for_payload(payload)
+    assert "Target Statuses" in html_for_payload(payload)
+    assert result.session_retrospect["target_ids"] == ["pysymbol:jobs/forecast.py::forecast_for_store"]
+    assert result.session_retrospect["hints"][0].startswith("Python target")
+
+
+def test_python_batch_generation_syncs_target_progress_incrementally(tmp_path):
+    repo = tmp_path / "repo"
+    source_a = repo / "jobs" / "forecast.py"
+    source_b = repo / "jobs" / "pricing.py"
+    source_a.parent.mkdir(parents=True)
+    source_a.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    source_b.write_text("def price_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    targets = [
+        default_registry().adapter_for("python").normalize_target(
+            RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+        ),
+        default_registry().adapter_for("python").normalize_target(
+            RawTargetSelection(target="jobs/pricing.py::price_for_store")
+        ),
+    ]
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=targets, language="python")
+    manager.mark_running(task_id, stage="startup")
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+    verification_calls = []
+
+    def verifying_with_progress_check(repo_path, target, test_paths, **kwargs):
+        verification_calls.append(target.target_id)
+        if len(verification_calls) == 2:
+            payload = build_status_payload(manager.db, task_id)
+            first = next(item for item in payload["classes"] if item["target_id"] == targets[0].target_id)
+            assert payload["task"]["status"] == "RUNNING"
+            assert payload["task"]["input_tokens"] == 20
+            assert payload["task"]["provider_cost_usd"] > 0
+            assert first["status"] == "PASS"
+            assert first["input_tokens"] == 20
+        return _passing_python_verification(repo_path, target, test_paths, **kwargs)
+
+    run_python_batch_generation(
+        repo_path=repo,
+        targets=targets,
+        task_id=task_id,
+        task_db_path=db_path,
+        client_factory=lambda repo_path: fake,
+        verification_runner=verifying_with_progress_check,
+    )
+
+    payload = build_status_payload(manager.db, task_id)
+    assert payload["task"]["status"] == "COMPLETED"
+    assert payload["task"]["input_tokens"] == 40
+    assert payload["task"]["provider_cost_usd"] > 0
+    assert [item["status"] for item in payload["classes"]] == ["PASS", "PASS"]
+
+
+def test_python_batch_generation_skips_terminal_targets_on_resume(tmp_path):
+    repo = tmp_path / "repo"
+    source_a = repo / "jobs" / "forecast.py"
+    source_b = repo / "jobs" / "pricing.py"
+    source_a.parent.mkdir(parents=True)
+    source_a.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    source_b.write_text("def price_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    targets = [
+        default_registry().adapter_for("python").normalize_target(
+            RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+        ),
+        default_registry().adapter_for("python").normalize_target(
+            RawTargetSelection(target="jobs/pricing.py::price_for_store")
+        ),
+    ]
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=targets, language="python")
+    first_row = manager.find_target_task(task_id, targets[0])
+    manager.db.update_class_task(first_row["id"], status="PASS", stage="finished", current_stage="finished")
+    manager.mark_running(task_id, stage="startup")
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=targets,
+        task_id=task_id,
+        task_db_path=db_path,
+        client_factory=lambda repo_path: fake,
+        verification_runner=_passing_python_verification,
+    )
+
+    assert len(fake.prompts) == 1
+    assert "jobs/pricing.py::price_for_store" in fake.prompts[0][1]
+    assert "jobs/forecast.py::forecast_for_store" not in fake.prompts[0][1]
+    assert result.session_retrospect["target_ids"] == ["pysymbol:jobs/pricing.py::price_for_store"]
+    payload = build_status_payload(manager.db, task_id)
+    rows = {item["target_id"]: item for item in payload["classes"]}
+    assert rows[targets[0].target_id]["status"] == "PASS"
+    assert rows[targets[1].target_id]["status"] == "PASS"
+
+
+def test_python_batch_generation_preverifies_existing_generated_test_before_llm(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    write_generated_test_file(repo, target, "def test_existing_forecast():\n    assert True\n")
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=[target], language="python")
+    row = manager.find_target_task(task_id, target)
+    manager.db.update_class_task(row["id"], status="QUEUED", stage="queued", current_stage="queued")
+    manager.mark_running(task_id, stage="startup")
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        task_id=task_id,
+        task_db_path=db_path,
+        client_factory=lambda repo_path: fake,
+        verification_runner=_passing_python_verification,
+    )
+
+    assert fake.prompts == []
+    assert result.results[target.target_id]["status"] == "PASS"
+    assert result.results[target.target_id]["plan_validation"]["existing_test_preverified"] is True
+    payload = build_status_payload(manager.db, task_id)
+    assert payload["task"]["status"] == "COMPLETED"
+    assert payload["classes"][0]["status"] == "PASS"
+
+
+def test_python_batch_generation_passes_ci_changed_lines_to_verifier(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(
+        repo_path=str(repo),
+        targets=[target],
+        language="python",
+        quality_mode="ci_incremental",
+        ci_context={
+            "enforcement": {
+                "evidence": {
+                    "changedLines": {
+                        "jobs/forecast.py": [1, 2, 2],
+                    }
+                }
+            }
+        },
+    )
+    manager.mark_running(task_id, stage="startup")
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+    captured = {}
+
+    def verifying_with_changed_lines(repo_path, target, test_paths, **kwargs):
+        captured["changed_lines"] = kwargs.get("changed_lines")
+        return _passing_python_verification(repo_path, target, test_paths, **kwargs)
+
+    run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        task_id=task_id,
+        task_db_path=db_path,
+        client_factory=lambda repo_path: fake,
+        verification_runner=verifying_with_changed_lines,
+    )
+
+    assert captured["changed_lines"] == {"jobs/forecast.py": [1, 2]}
+    assert "CI CHANGED LINES TO COVER" in fake.prompts[0][1]
+    assert "jobs/forecast.py:1" in fake.prompts[0][1]
+
+
+def test_python_batch_generation_preserves_existing_test_when_provider_returns_prose(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    generated = repo / generated_test_path(target)
+    original = render_generated_test_file(target, body="def test_existing_forecast():\n    assert True\n")
+    generated.parent.mkdir(parents=True)
+    generated.write_text(original, encoding="utf-8")
+    fake = _ProsePythonOpenCodeClient(repo_path=str(repo))
+
+    def failing_existing_verification(repo_path, target, test_paths, **kwargs):
+        return PythonVerificationResult(status="failed", reason_code="test_failed", tests_pass=False)
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        client_factory=lambda repo_path: fake,
+        verification_runner=failing_existing_verification,
+    )
+
+    assert result.results[target.target_id]["status"] == "PROVIDER_ERROR"
+    assert generated.read_text(encoding="utf-8") == original
+    assert "Reading the context" not in generated.read_text(encoding="utf-8")
+
+
+def test_python_batch_generation_blocks_unsafe_llm_source_edits(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    _init_git_repo(repo)
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=[target], language="python")
+    manager.mark_running(task_id, stage="startup")
+
+    with pytest.raises(Exception, match="Unsafe LLM-authored paths"):
+        run_python_batch_generation(
+            repo_path=repo,
+            targets=[target],
+            task_id=task_id,
+            task_db_path=db_path,
+            client_factory=lambda repo_path: _UnsafePythonOpenCodeClient(Path(repo_path)),
+            verification_runner=_passing_python_verification,
+        )
+
+    payload = build_status_payload(manager.db, task_id)
+    assert payload["classes"][0]["status"] == "UNSAFE_DIFF"
+    assert "jobs/forecast.py" in payload["classes"][0]["error"]
+
+
+def test_python_batch_generation_adopts_new_directly_written_generated_file(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    fake = _DirectGeneratedFilePythonOpenCodeClient(repo_path=repo)
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        client_factory=lambda repo_path: fake,
+        verification_runner=_passing_python_verification,
+    )
+
+    generated = repo / "tests" / "uta_generated" / "test_jobs_forecast.py"
+    text = generated.read_text(encoding="utf-8")
+    assert result.results[target.target_id]["status"] == "PASS"
+    assert text.startswith("# Generated by UTA. Safe to update.")
+    assert "def test_directly_written_forecast" in text
+
+
+def test_python_batch_generation_adopts_direct_file_after_provider_timeout(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    fake = _TimeoutAfterDirectGeneratedFilePythonOpenCodeClient(repo_path=repo)
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        client_factory=lambda repo_path: fake,
+        verification_runner=_passing_python_verification,
+    )
+
+    generated = repo / "tests" / "uta_generated" / "test_jobs_forecast.py"
+    text = generated.read_text(encoding="utf-8")
+    assert result.results[target.target_id]["status"] == "PASS"
+    assert result.results[target.target_id]["plan_validation"]["provider_recovered"].startswith("OpenCode timed out")
+    assert text.startswith("# Generated by UTA. Safe to update.")
+    assert "def test_directly_written_forecast" in text
+
+
+def test_python_batch_generation_adopts_changed_existing_generated_file(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    generated = repo / "tests" / "uta_generated" / "test_jobs_forecast.py"
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    generated.write_text(
+        render_generated_test_file(target, body="def test_old_forecast():\n    assert True\n"),
+        encoding="utf-8",
+    )
+    fake = _DirectGeneratedFilePythonOpenCodeClient(repo_path=repo)
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        client_factory=lambda repo_path: fake,
+        verification_runner=_passing_python_verification,
+    )
+
+    text = generated.read_text(encoding="utf-8")
+    assert result.results[target.target_id]["status"] == "PASS"
+    assert text.startswith("# Generated by UTA. Safe to update.")
+    assert "def test_directly_written_forecast" in text
+    assert "def test_old_forecast" not in text
+    assert "Created tests/uta_generated" not in text
+
+
+def test_python_batch_generation_maps_mutation_failure_to_task_status(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=[target], language="python")
+    manager.mark_running(task_id, stage="startup")
+    fake = _FakePythonOpenCodeClient(repo_path=str(repo))
+
+    result = run_python_batch_generation(
+        repo_path=repo,
+        targets=[target],
+        task_id=task_id,
+        task_db_path=db_path,
+        client_factory=lambda repo_path: fake,
+        verification_runner=_mutation_failing_python_verification,
+    )
+
+    assert result.results[target.target_id]["status"] == "MUTATION_FAIL"
+    assert result.results[target.target_id]["mutation_score"] == 50.0
+    payload = build_status_payload(manager.db, task_id)
+    assert payload["task"]["status"] == "FAILED"
+    assert payload["classes"][0]["status"] == "MUTATION_FAIL"
+
+
+def test_python_run_cli_executes_generation_and_writes_report(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    db_path = tmp_path / "tasks.db"
+
+    monkeypatch.setattr("uta.opencode.client.OpenCodeClient", _FakePythonOpenCodeClient)
+    monkeypatch.setattr("uta.language.python.batch.verify_python_target", _passing_python_verification)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "run",
+            "--repo",
+            str(repo),
+            "--language",
+            "python",
+            "--target",
+            "jobs/forecast.py::forecast_for_store",
+            "--production",
+            "--task-db",
+            str(db_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Starting Python UTA" in result.output
+    assert "UTA Per-Target Metrics" in result.output
+    assert (repo / "tests" / "uta_generated" / "test_jobs_forecast.py").exists()
+    assert sorted((repo / ".uta_reports").glob("summary_python_*.json"))
+    manager = TaskManager(db_path)
+    payload = build_status_payload(manager.db, 1)
+    assert payload["task"]["language"] == "python"
+    assert payload["task"]["status"] == "COMPLETED"
+    assert payload["classes"][0]["status"] == "PASS"
+    assert payload["classes"][0]["target_id"] == "pysymbol:jobs/forecast.py::forecast_for_store"
+
+
+def test_python_generation_rate_limit_raises_provider_fallback_error(tmp_path):
+    repo = tmp_path / "repo"
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    target = default_registry().adapter_for("python").normalize_target(
+        RawTargetSelection(target="jobs/forecast.py::forecast_for_store")
+    )
+    db_path = tmp_path / "tasks.db"
+    manager = TaskManager(db_path)
+    task_id = manager.create_task_targets(repo_path=str(repo), targets=[target], language="python")
+    manager.mark_running(task_id, stage="startup")
+
+    with pytest.raises(ProviderRateLimitError) as excinfo:
+        run_python_batch_generation(
+            repo_path=repo,
+            targets=[target],
+            task_id=task_id,
+            task_db_path=db_path,
+            client_factory=lambda repo_path: _RateLimitedPythonOpenCodeClient(repo_path=Path(repo_path)),
+        )
+
+    assert excinfo.value.reason == "rate_limit"
+    assert excinfo.value.rate_limit["provider_id"] == "token-pool"
+    assert excinfo.value.rate_limit["model_id"] == "gpt-5.5"
+
+
+def test_python_run_defaults_to_git_history_target_selection(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "jobs" / "forecast.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def forecast_for_store(store_id):\n    return store_id\n", encoding="utf-8")
+    (repo / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+    captured = {}
+
+    def fake_changed(repo_path, days=30, module=None):
+        captured["scan"] = (repo_path, days, module)
+        return [("jobs/forecast.py", 4)]
+
+    def fail_all(*args, **kwargs):
+        raise AssertionError("--all scanner should not be used")
+
+    def fake_generation(repo_path, targets, **kwargs):
+        target_refs = list(targets)
+        captured["targets"] = [target.source_path for target in target_refs]
+        captured["coverage_gate"] = kwargs.get("coverage_gate")
+        captured["mutation_gate"] = kwargs.get("mutation_gate")
+        return PythonBatchGenerationResult(
+            results={
+                target.target_id: {
+                    "status": "GENERATED",
+                    "language": target.language,
+                    "target_id": target.target_id,
+                    "display_name": target.display_name,
+                    "source_path": target.source_path,
+                }
+                for target in target_refs
+            }
+        )
+
+    monkeypatch.setattr("uta.engine.source_selection.get_changed_python_files", fake_changed)
+    monkeypatch.setattr("uta.engine.source_selection.get_all_python_files", fail_all)
+    monkeypatch.setattr("uta.language.python.batch.run_python_batch_generation", fake_generation)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "run",
+            "--repo",
+            str(repo),
+            "--language",
+            "python",
+            "--days",
+            "7",
+            "--max-files",
+            "1",
+            "--coverage-gate",
+            "88",
+            "--mutation-gate",
+            "99",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["scan"] == (str(repo), 7, None)
+    assert captured["targets"] == ["jobs/forecast.py"]
+    assert captured["coverage_gate"] == 88
+    assert captured["mutation_gate"] == 99

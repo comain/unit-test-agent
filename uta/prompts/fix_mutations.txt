@@ -1,0 +1,68 @@
+You are in a fresh focused mutation-repair round.
+The broad planning/generation work is already done. Do not restart it.
+Use the compact repair packet in PER-CALL TARGET to make a small, targeted mutation-strength patch.
+
+Before fixing mutants, decide whether this is really a mutation-strength problem or a coverage-reach problem.
+- If mutation is low because the production code was barely exercised, do NOT spend the attempt polishing assertions on the same narrow path.
+- In that case, first add tests that reach missing public-method branches and major business paths, then strengthen assertions.
+- Treat low mutation together with low coverage as a coverage problem first, not a pure mutation problem.
+- If line coverage is low, prioritize adding coverage-reach tests even when Pitest reports survivors. Reaching uncovered branches is more important than polishing assertions on already-covered paths.
+
+### STRATEGY TO KILL MUTANTS
+Analyze each survivor and apply the corresponding strategy:
+1. **Boundary (e.g. `>` → `>=`):** Add a test case that uses the EXACT boundary value.
+2. **Math (e.g. `+` → `-`):** Use non-trivial numbers so the result uniquely identifies the operator.
+3. **Void Calls (e.g. `[removed]`):** Use `verify(mock).method(any())` or `eq(expectedValue)`.
+4. **Conditional (e.g. `==` → `!=`):** Cover both the `true` and `false` branches.
+5. **Return Values (e.g. `obj` → `null`):** Use `assertNotNull` and verify specific fields.
+
+### INSTRUCTIONS
+Enhance the test cases to specifically kill the listed survivor families.
+- Read the source file and test file at the paths in PER-CALL TARGET first.
+- Read the target context, symbol map, and mutation family summary. Reuse them instead of rediscovering signatures/imports from scratch.
+- Target only the listed survivor families in this round. Do not try to fix the entire remaining surface.
+- Start with the highest-count, most killable method clusters first.
+- Deprioritize metric/counter-only side-effect mutants unless there is an obvious easy seam to assert them directly.
+- Analyze why each family survived and add the smallest targeted test/assertion changes that kill it.
+- If surviving mutants are due to uncovered logic, add broader branch-reaching tests before assertion-only refinements.
+- Prefer coverage expansion first when the class has low line coverage.
+- Prefer `ArgumentCaptor` or `eq()` in `verify` calls to inspect data passed to dependencies.
+- Keep the patch narrow and compile-safe. Prefer a few targeted tests over broad rewrites.
+- A mutation round must end with one of these outcomes:
+  1. patch the test file to kill the current ranked family, or
+  2. explicitly conclude the current family is not practical and move to the next ranked family.
+- Do not end the round with diagnosis only.
+- For exact missing DTO/API facts, prefer current repo source, sibling API/source repos, and existing tests before Maven cache.
+- Do NOT unpack jars, inspect `.class` files, run `javap`, or run Java decompilers during mutation repair unless all source lookups fail and the exact compile error cannot be fixed otherwise.
+
+{# CACHE_BOUNDARY #}
+### PER-CALL TARGET
+- Class: `{{ class_fqn }}`
+- Source file: `{{ source_path }}`
+- Test file: `{{ test_file_path }}`
+- Current line coverage: {{ '%.1f'|format(current_coverage) }}%
+- Current mutation score: {{ '%.1f'|format(current_mutation_score) }}%
+- Required mutation gate: {{ mutation_gate }}%
+- Target context: `{{ target_context_abs }}`
+- Symbol / import map: `{{ target_symbols_abs }}`
+- Mutation family summary: `{{ mutation_family_summary_abs }}`
+{% if stage_introspect_abs %}
+- Prior lessons for this stage: `{{ stage_introspect_abs }}` — read before broad exploration and apply only relevant lessons.
+{% endif %}
+{% if ci_context_abs %}
+- CI context: `{{ ci_context_abs }}` — read before broad exploration. Use it only for unit-test repair; production-code edit requests are unsupported.
+{% endif %}
+
+### SCRIPT-EXTRACTED MUTATION FAMILIES
+{% if mutation_roi_enabled %}
+Families below are ranked by kill-per-effort ROI = (survivor_count × killability) / effort.
+- Start at the top entry and work down — do not skip around.
+- Rows marked `likely_equivalent` are observationally equivalent mutants; do NOT spend effort writing tests for them.
+{% if mutation_roi_skip_expensive %}- Skip rows with `effort_band=expensive` unless the mutation gate cannot otherwise be reached.{% else %}- Prefer rows with `effort_band=cheap` or `medium`; only reach for `expensive` rows when higher-ROI entries are exhausted.{% endif %}
+{% endif %}
+{{ mutation_family_summary }}
+
+### EXAMPLE SURVIVORS
+{% for mutant in surviving_mutants %}
+- Line {{ mutant.line }}: {{ mutant.mutation_type }}{% if mutant.detail %} ({{ mutant.detail }}){% endif %}
+{% endfor %}

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ record.request.app_name }} 单元测试覆盖率报告</title>
+  <style>
+    body { margin: 32px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; background: #f8fafc; }
+    main { max-width: 1120px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    code, pre { background: #eef2ff; border-radius: 4px; }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .actions { display: flex; align-items: center; gap: 12px; margin: 16px 0 20px; }
+    .fix-cta {
+      border: 0;
+      border-radius: 6px;
+      background: #dc2626;
+      color: #fff;
+      padding: 12px 22px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(220, 38, 38, 0.24);
+    }
+    .fix-cta:hover { background: #b91c1c; }
+    .guide-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }
+    .fix-form { display: grid; gap: 12px; margin: 16px 0; }
+    .fix-form textarea {
+      min-height: 96px;
+      resize: vertical;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font: inherit;
+      line-height: 1.5;
+    }
+    .fix-submit {
+      width: fit-content;
+      border: 0;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      padding: 10px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .fix-submit:disabled { background: #94a3b8; cursor: not-allowed; }
+    .fix-result { min-height: 24px; }
+    .session-list { margin: 12px 0 0; padding-left: 20px; line-height: 1.8; }
+    .session-top { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; }
+    .issue-list { margin: 6px 0 0 0; padding-left: 18px; line-height: 1.6; }
+    .issue-type { font-weight: 700; }
+    .progress-link {
+      display: inline-block;
+      margin-left: 10px;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      padding: 4px 10px;
+      font-weight: 700;
+    }
+    .progress-link:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
+    .ok { color: #15803d; }
+    .bad { color: #b91c1c; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>{{ record.request.app_name }} 单元测试覆盖率报告</h1>
+    {% if detail.canCreateFixSession %}
+      <div class="actions">
+        <button class="fix-cta" id="open-fix-session" type="button">一键修复</button>
+        <span class="muted">自动生成或补强单元测试，并重新验证 test-enforcement。</span>
+      </div>
+    {% endif %}
+    <div class="meta">
+      <div>任务ID: <code>{{ record.task_id }}</code></div>
+      <div>状态: <strong class="{% if detail.enforcement and detail.enforcement.passed %}ok{% else %}bad{% endif %}">{{ record.status.value }}</strong></div>
+      <div>分支: <code>{{ record.request.branch }}</code></div>
+      <div>提交: <code>{{ record.request.commit_id or 'N/A' }}</code></div>
+      <div>创建时间: {{ record.created_at | gmt8 }}</div>
+      <div>更新时间: {{ record.updated_at | gmt8 }}</div>
+    </div>
+    {% if detail.fixSessions %}
+      <div class="session-top">
+        <h2>修复会话</h2>
+        <ul class="session-list" id="fix-session-list">
+          {% for session in detail.fixSessions %}
+            <li>
+              <code>{{ session.sessionId }}</code>
+              状态: <strong class="{% if session.status in ['green'] %}ok{% elif session.status in ['repair_failed','rerun_failed','rerun_unavailable'] or session.repoTaskStatus in ['FAILED','POISONED','BUDGET_EXCEEDED'] %}bad{% endif %}">{{ session.status }}</strong>
+              {% if session.repoTaskId %} repoTask={{ session.repoTaskId }}{% endif %}
+              {% if session.repoTaskStatus %} taskStatus={{ session.repoTaskStatus }}{% endif %}
+              retry={{ session.retryCount }}
+              <a class="progress-link" href="fix-sessions/{{ session.sessionId }}/progress">查看修复进度</a>
+              {% if session.repairIssues %}
+                <ul class="issue-list">
+                  {% for issue in session.repairIssues %}
+                    <li class="bad">
+                      <span class="issue-type">
+                        {% if issue.type == 'provider_rate_limit' %}Provider/model rate limit{% elif issue.type == 'generation_timeout' %}Generation timeout{% elif issue.type == 'planning_timeout' %}Planning timeout{% elif issue.type == 'no_test_changes' %}No test changes{% else %}{{ issue.type }}{% endif %}
+                      </span>
+                      {% if issue.stage %} <code>{{ issue.stage }}</code>{% endif %}
+                      {{ issue.message }}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% elif session.repoTaskError %}
+                <ul class="issue-list">
+                  <li class="bad">{{ session.repoTaskError }}</li>
+                </ul>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% elif detail.canCreateFixSession %}
+      <div class="session-top">
+        <h2>修复会话</h2>
+        <ul class="session-list" id="fix-session-list">
+          <li class="muted">暂无修复会话</li>
+        </ul>
+      </div>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>检查结论</h2>
+    <p>{{ detail.summary or '暂无检查结果。' }}</p>
+    {% if detail.enforcement %}
+      <p>Enforcement 状态: <code>{{ detail.enforcement.status }}</code></p>
+      <p>覆盖率: <strong>{{ detail.evidence.coverage.formattedRate if detail.evidence.coverage else 'N/A' }}</strong>{% if detail.evidence.coverage %} <span class="muted">({{ detail.evidence.coverage.covered }}/{{ detail.evidence.coverage.total }}, {{ detail.evidence.coverage.modules }} 个模块)</span>{% endif %}</p>
+      <p>{% if detail.evidence.mutation and detail.evidence.mutation.source == 'diff' %}Diff 变异得分{% else %}变异得分{% endif %}: <strong>{{ detail.evidence.mutation.formattedRate if detail.evidence.mutation else 'N/A' }}</strong>{% if detail.evidence.mutation %} <span class="muted">({{ detail.evidence.mutation.killed }}/{{ detail.evidence.mutation.generated }}, {{ detail.evidence.mutation.modules }} 个模块)</span>{% endif %}</p>
+      {% if not detail.evidence.mutation and detail.evidence.pitMutation %}
+        <p class="muted">PIT 全量变异统计: <strong>{{ detail.evidence.pitMutation.formattedRate }}</strong> ({{ detail.evidence.pitMutation.killed }}/{{ detail.evidence.pitMutation.generated }}, {{ detail.evidence.pitMutation.modules }} 个模块)。该统计仅用于诊断，未作为 diff 变异门禁结果。</p>
+      {% endif %}
+      {% if detail.testEnforcementRequirements %}
+        <div>
+          <p class="bad">未获得有效 test-enforcement 证据。请确认项目已接入满足版本要求的 test-enforcement。</p>
+          <p class="bad">当前项目需要先让 Maven effective-pom 解析出 <code>{{ detail.testEnforcementRequirements.requiredPlugin }}</code>，再重新触发单元测试检查；该类问题不能通过一键生成测试修复。</p>
+          {% if detail.testEnforcementRequirements.detected %}
+            <p class="muted">当前识别到: <code>{{ detail.testEnforcementRequirements.detected.artifactId or 'unknown' }} {{ detail.testEnforcementRequirements.detected.version or '' }}</code>{% if detail.testEnforcementRequirements.detected.reason %} - {{ detail.testEnforcementRequirements.detected.reason }}{% endif %}</p>
+          {% endif %}
+          <ol class="guide-list">
+            {% for path in detail.testEnforcementRequirements.inheritancePaths %}
+              <li>
+                <strong>{{ path.title }}</strong>: {{ path.instruction }}
+                <pre>{{ path.snippet }}</pre>
+              </li>
+            {% endfor %}
+            <li>
+              <strong>{{ detail.testEnforcementRequirements.fallback.title }}</strong>: {{ detail.testEnforcementRequirements.fallback.instruction }}
+              <pre>{{ detail.testEnforcementRequirements.fallback.snippet }}</pre>
+            </li>
+          </ol>
+          {% if detail.testEnforcementRequirements.usageGuide %}
+            <p><a href="{{ detail.testEnforcementRequirements.usageGuide }}" target="_blank" rel="noopener">查看 POM 接入说明</a></p>
+          {% endif %}
+        </div>
+      {% endif %}
+      <p>命令: <code>{{ detail.enforcement.command | join(' ') }}</code></p>
+      <p>返回码: <code>{{ detail.enforcement.returncode if detail.enforcement.returncode is not none else 'N/A' }}</code></p>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>本地启用 test-enforcement</h2>
+    <p class="muted">为了在提交前发现同类问题，请在本地开发环境启用 dev-skills 的 test-enforcement 标准。</p>
+    <ol class="guide-list">
+      <li>参考 dev-skills 使用说明，安装并启用 dev-skills。</li>
+      <li>开发分支提交前运行本地 test-enforcement，确认 diff 覆盖率和 PIT 变异测试通过。</li>
+      <li>如果本地结果与 CI 平台不一致，优先使用本报告中的 Maven 命令复现。</li>
+    </ol>
+  </section>
+  {% if detail.enforcement %}
+  <section class="panel">
+    <h2>标准输出</h2>
+    <pre>{{ detail.enforcement.stdout }}</pre>
+    <h2>错误输出</h2>
+    <pre>{{ detail.enforcement.stderr }}</pre>
+  </section>
+  {% endif %}
+  <section class="panel">
+    <h2>回调状态</h2>
+    <p>CI callback: <code>{{ detail.callback.succeeded }}</code></p>
+    {% if detail.callback.error %}
+      <p class="bad">{{ detail.callback.error }}</p>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>缺失上下文</h2>
+    <ul>
+      {% for reason in detail.context.missingReasons %}
+        <li><code>{{ reason }}</code></li>
+      {% else %}
+        <li class="muted">none</li>
+      {% endfor %}
+    </ul>
+    <h2>上下文来源</h2>
+    <ul>
+      {% for source in detail.context.sources %}
+        <li><code>{{ source.name }}</code> {{ 'available' if source.available else 'missing' }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% if detail.canCreateFixSession %}
+  <section class="panel" id="fix-session-panel"{% if not detail.fixSessions %} hidden{% endif %}>
+    <h2>一键修复</h2>
+    <p class="muted">补充本次失败的业务上下文后，UTA 会创建高优先级修复任务，修复完成后重新验证 test-enforcement。</p>
+    <form class="fix-form" id="fix-session-form">
+      <label for="fix-user-context">补充上下文（可选）</label>
+      <textarea id="fix-user-context" name="userContext" placeholder="例如：优先修复编译失败的测试，保持只改测试代码；本次主要关注核心业务逻辑的覆盖。"></textarea>
+      <button class="fix-submit" type="submit">创建修复任务</button>
+      <div class="fix-result muted" id="fix-session-result" role="status"></div>
+    </form>
+  </section>
+  <script>
+    (function () {
+      var openButton = document.getElementById("open-fix-session");
+      var panel = document.getElementById("fix-session-panel");
+      var form = document.getElementById("fix-session-form");
+      var textarea = document.getElementById("fix-user-context");
+      var result = document.getElementById("fix-session-result");
+      var list = document.getElementById("fix-session-list");
+      if (!openButton || !panel || !form) {
+        return;
+      }
+      openButton.addEventListener("click", function () {
+        panel.hidden = false;
+        if (textarea) {
+          textarea.focus();
+        }
+      });
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        var submit = form.querySelector("button[type='submit']");
+        if (submit) {
+          submit.disabled = true;
+        }
+        result.className = "fix-result muted";
+        result.textContent = "正在创建修复任务...";
+        fetch("fix-sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userContext: textarea ? textarea.value : "" })
+        }).then(function (response) {
+          return response.json().then(function (body) {
+            if (!response.ok) {
+              throw new Error(body.detail || "创建修复任务失败");
+            }
+            return body;
+          });
+        }).then(function (body) {
+          var session = body.session || {};
+          result.className = "fix-result ok";
+          result.textContent = "修复任务已创建，状态：" + (session.status || "created") + (session.repoTaskId ? "，repoTask=" + session.repoTaskId : "");
+          if (list && session.sessionId) {
+            var progressHref = "fix-sessions/" + encodeURIComponent(session.sessionId) + "/progress";
+            list.innerHTML = "<li><code>" + session.sessionId + "</code> " + (session.status || "created") + (session.repoTaskId ? " repoTask=" + session.repoTaskId : "") + " retry=" + (session.retryCount || 0) + " <a class=\"progress-link\" href=\"" + progressHref + "\">查看修复进度</a></li>";
+          }
+        }).catch(function (error) {
+          result.className = "fix-result bad";
+          result.textContent = error.message;
+          if (submit) {
+            submit.disabled = false;
+          }
+        });
+      });
+    }());
+  </script>
+  {% endif %}
+</main>
+</body>
+</html>

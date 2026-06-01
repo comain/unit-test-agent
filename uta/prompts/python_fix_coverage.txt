@@ -1,0 +1,33 @@
+A generated Python test file runs but does not meet the coverage gate.
+Add focused pytest assertions for uncovered behavior without changing production code.
+
+Stable rules:
+- Edit tests only, under `tests/uta_generated/`.
+- Do not edit production Python files.
+- Preserve deterministic execution and UTA ownership metadata.
+- Mock network, database, scheduler, filesystem, Spark/Hive, and environment side effects.
+- When the source path is under `src/`, add the repository `src` directory to `sys.path` and import the real package below it, for example `shidiao.routes`; do not import modules with a `src.` prefix and do not create a synthetic alias package such as `_uta_*` because mutmut must see tests execute the real mutated module.
+- Prefer small behavior assertions over broad smoke tests.
+
+{# CACHE_BOUNDARY #}
+### TARGET
+- Target: `{{ display_name }}`
+- Target ID: `{{ target_id }}`
+- Source: `{{ source_path }}`
+{% if symbol %}- Symbol: `{{ symbol }}`
+{% endif %}
+- Generated test path: `{{ generated_test_path or test_file_path }}`
+- Coverage gate: `{{ coverage_gate or ci_diff_coverage_gate }}`
+
+### CONTEXT
+- Target context: `{{ context_abs or target_context_abs }}`
+- Context JSON: `{{ context_json_abs }}`
+- Structured query: `{{ index_query_command }}`
+
+### COVERAGE DIAGNOSTICS
+```
+{{ coverage_diagnostics or coverage_report }}
+```
+
+### REPAIR TASK
+Add or refine tests in the same generated test file so the target reaches the coverage gate.

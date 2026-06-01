@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UTA 最近任务状态</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --text: #18212f;
+      --muted: #5f6f85;
+      --border: #d9e0ea;
+      --link: #1769aa;
+      --ok: #18794e;
+      --bad: #b42318;
+      --warn: #9a6700;
+      --run: #175cd3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    main {
+      width: min(1360px, calc(100vw - 32px));
+      margin: 28px auto 40px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    p { margin: 0; }
+    a {
+      color: var(--link);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a:hover { text-decoration: underline; }
+    code {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #eef3f8;
+      color: #233142;
+      word-break: break-word;
+    }
+    .muted { color: var(--muted); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .button.primary {
+      border-color: #1769aa;
+      background: #1769aa;
+      color: #fff;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .metric {
+      min-height: 86px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+    .metric-label {
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .metric-value {
+      font-size: 30px;
+      line-height: 1.1;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #f8fafc;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .chip.ok, .status.success, .status.passed { color: var(--ok); }
+    .chip.bad, .status.failed, .status.missing_evidence { color: var(--bad); }
+    .chip.warn, .status.queued, .status.pending { color: var(--warn); }
+    .chip.run, .status.running { color: var(--run); }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      min-width: 1120px;
+      border-collapse: collapse;
+      background: var(--panel);
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+    th {
+      background: #f1f5f9;
+      color: #344054;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    .status {
+      display: inline-block;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .job-main {
+      display: grid;
+      gap: 5px;
+      min-width: 240px;
+    }
+    .branch {
+      max-width: 280px;
+      overflow-wrap: anywhere;
+    }
+    .summary {
+      max-width: 360px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 120px;
+    }
+    .empty {
+      padding: 30px;
+      text-align: center;
+      color: var(--muted);
+    }
+    @media (max-width: 860px) {
+      main { width: min(100vw - 24px, 1360px); margin-top: 18px; }
+      header { display: block; }
+      .toolbar { justify-content: flex-start; margin-top: 12px; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) {
+      .summary-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>UTA 最近任务状态</h1>
+      <p class="muted">窗口: {{ detail.since | gmt8 }} 至 {{ detail.generatedAt | gmt8 }}，最近 {{ detail.hours }} 小时。</p>
+    </div>
+    <div class="toolbar" aria-label="页面操作">
+      <a class="button" href="recent/data?hours={{ detail.hours }}&amp;limit={{ detail.limit }}">JSON</a>
+      <a class="button primary" href="recent.html?hours={{ detail.hours }}&amp;limit={{ detail.limit }}">刷新</a>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="summary-title">
+    <h2 id="summary-title">汇总</h2>
+    <div class="summary-grid">
+      <div class="metric">
+        <div class="metric-label">任务数</div>
+        <div class="metric-value">{{ detail.total }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">成功</div>
+        <div class="metric-value">{{ detail.statusCounts.get('success', 0) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">失败</div>
+        <div class="metric-value">{{ detail.statusCounts.get('failed', 0) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">运行中/排队</div>
+        <div class="metric-value">{{ detail.statusCounts.get('running', 0) + detail.statusCounts.get('queued', 0) }}</div>
+      </div>
+    </div>
+    <div class="chips" aria-label="语言分布">
+      {% for language, count in detail.languageCounts.items() %}
+        <span class="chip">{{ language }}={{ count }}</span>
+      {% else %}
+        <span class="chip warn">no jobs</span>
+      {% endfor %}
+      {% if not detail.languageCounts.get('python') %}
+        <span class="chip warn">python=0</span>
+      {% endif %}
+    </div>
+    <div class="chips" aria-label="门禁分布">
+      {% for status, count in detail.enforcementCounts.items() %}
+        <span class="chip {% if status == 'passed' %}ok{% elif status in ['failed', 'missing_evidence'] %}bad{% else %}warn{% endif %}">{{ status }}={{ count }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="jobs-title">
+    <h2 id="jobs-title">任务明细</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>状态</th>
+            <th>门禁</th>
+            <th>语言</th>
+            <th>CI</th>
+            <th>时间</th>
+            <th>修复</th>
+            <th>摘要</th>
+            <th>链接</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.rows %}
+            <tr>
+              <td>
+                <div class="job-main">
+                  <strong>{{ row.appName }}</strong>
+                  <code>{{ row.taskId }}</code>
+                  <span class="branch">{{ row.branch }}</span>
+                  {% if row.jiraId %}<span class="muted">{{ row.jiraId }}</span>{% endif %}
+                </div>
+              </td>
+              <td><span class="status {{ row.status }}">{{ row.status }}</span></td>
+              <td><span class="status {{ row.enforcementStatus }}">{{ row.enforcementStatus }}</span></td>
+              <td>{{ row.language }}</td>
+              <td>
+                {% if row.taskTemplateId %}<div><code>{{ row.taskTemplateId }}</code></div>{% endif %}
+                {% if row.ciTaskId %}<div class="muted">task={{ row.ciTaskId }}</div>{% endif %}
+                {% if row.recordId %}<div class="muted">record={{ row.recordId }}</div>{% endif %}
+              </td>
+              <td>
+                <div>{{ row.createdAt | gmt8 }}</div>
+                <div class="muted">更新 {{ row.updatedAt | gmt8 }}</div>
+              </td>
+              <td>
+                {% if row.fixSessionCount %}
+                  <div>{{ row.fixSessionCount }} sessions</div>
+                  {% for status, count in row.fixSessionStatusCounts.items() %}
+                    <div class="muted">{{ status }}={{ count }}</div>
+                  {% endfor %}
+                {% else %}
+                  <span class="muted">none</span>
+                {% endif %}
+              </td>
+              <td><div class="summary">{{ row.summary or '暂无摘要' }}</div></td>
+              <td>
+                <div class="links">
+                  <a href="{{ row.taskUrl or ('../task-status/' ~ row.taskId) }}">状态</a>
+                  <a href="{{ row.reportUrl or ('../reports/' ~ row.taskId ~ '/index.html') }}">报告</a>
+                </div>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td class="empty" colspan="9">最近 {{ detail.hours }} 小时没有 UTA CI 任务记录。</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+</body>
+</html>
