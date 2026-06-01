@@ -1,0 +1,126 @@
+You are preparing to generate JUnit 4 tests for legacy Java classes.
+
+Do NOT modify files yet.
+Do NOT run compile or test commands yet.
+Produce only a concise planning document for the upcoming test generation.
+
+### REQUIRED PLAN FORMAT
+For each class, provide:
+1. `PUBLIC METHODS`
+2. `BRANCH AXES`
+3. `PLANNED TESTS`
+4. `COVERAGE RISKS`
+
+For strict-coverage classes also provide:
+5. `METHODS REQUIRED FOR GATE`
+6. `ESTIMATED REACH`
+7. `BLOCKERS`
+8. `IMPLEMENTATION WAVES`
+
+Rules:
+- List the important public methods or public entry paths worth testing.
+- For large classes, pick only the highest-value public methods first; do not exhaustively enumerate every interface method.
+- Identify the main branch axes: status, flags, nullability, empty/non-empty collections, business-state transitions, success/failure paths.
+- For `PLANNED TESTS`, map each planned test case to the branch family it covers.
+- For large legacy classes, include a small coverage matrix rather than only a prose summary.
+- Prefer characterization-style behavior coverage first.
+- Resolve only the broad planning questions here: which collaborators are safe to mock, which must be manually constructed, and which existing in-repo tests are the closest style references.
+- Keep only the compile-critical facts that are already visible in current repo cache/context. If an external DTO/value-object API is still uncertain, record it as a blocker instead of chasing it during planning.
+- Keep the plan short, concrete, and directly usable for generation.
+- Never ask for or return full source code, full imports, exhaustive method inventories, or long verbatim excerpts.
+- Default to the repo-local index query first: `{{ index_query_command }} --class-fqn <CLASS> --json-output`.
+- If the index result is insufficient, then use direct targeted `read`, `grep`, and `glob` lookups in the current session.
+- Do NOT use delegated subagents during planning.
+- Do NOT search `.m2`, unpack JARs, decompile classes, or inspect compiled artifacts during planning.
+- Do NOT use `bash`/shell commands for repository discovery during planning, except the repo-local index query command above. Outside that exception, stick to direct targeted `read`, `grep`, and `glob`.
+- Prefer direct targeted source reads over chasing framework internals unless a missing type blocks the plan.
+- If a helper/template type cannot be found quickly in repo or cached context, record it as a blocker and continue planning from the visible public behavior instead of escalating to artifact lookup.
+- Per class, keep the final plan to roughly 400-800 words. Summarize large classes instead of expanding them.
+- For strict coverage classes, do NOT say "do not chase class-wide completeness", "defer heavier branches", or similar narrowing language unless you also prove the remaining scope can still plausibly reach the gate.
+- For strict coverage classes, `METHODS REQUIRED FOR GATE` must name the public methods that are necessary to hit the configured coverage gate.
+- For strict coverage classes, `ESTIMATED REACH` must state whether the plan can plausibly hit the configured coverage gate and why.
+- For strict coverage classes, `ESTIMATED REACH` must be based on concrete public methods and realistic branch reach. Do NOT count imports, anonymous template wrappers, empty `checkParams`, generated boilerplate, or repeated scaffolding as "free coverage".
+- For strict coverage classes, if the current scope cannot plausibly reach the gate, expand it now instead of deferring to later coverage-fix prompts.
+- For strict coverage classes, do NOT output a giant flat list of dozens of tests. Group thin delegates and low-value variants into compact coverage families.
+- For strict coverage classes, plan an executable first pass of roughly 25-35 tests, focused on the highest-yield methods and branch families. Additional fallback tests belong in a later wave, not the initial generation pass.
+- For strict coverage classes, `IMPLEMENTATION WAVES` must split the work into:
+  - `WAVE 1`: the smallest realistic first-pass set that could get close to the gate
+  - `WAVE 2`: follow-up tests only if coverage is still below the gate
+- For strict coverage classes, `BLOCKERS` must name concrete test-design constraints (for example static calls, private executors, pager loops, hard-to-build DTOs) and say how the tests should avoid or handle them.
+
+Do not write code. Output only the plan.
+
+{# CACHE_BOUNDARY #}
+### PER-RUN CONFIGURATION
+{% if quality_mode == "ci_incremental" %}
+- Quality mode: `ci_incremental`
+- Final hard gate: test-enforcement on changed diff lines
+- Required diff line coverage: `{{ ci_diff_coverage_gate }}%`
+- Required diff mutation score: `{{ ci_diff_mutation_gate }}%`
+- Backend class-level UTA gates are disabled for this run; do not plan around class-wide `{{ coverage_gate }}%` coverage.
+{% else %}
+- Coverage gate: `{{ coverage_gate }}%`
+{% endif %}
+
+{% if batch|length == 1 %}
+### TARGET CLASS
+- `{{ batch[0] }}`
+{% else %}
+### TARGET CLASSES
+{% for class_fqn in batch %}
+- `{{ class_fqn }}`
+{% endfor %}
+{% endif %}
+
+{% if strict_coverage_classes %}
+### STRICT COVERAGE CLASSES
+The following classes are large/complex relative to the required coverage gate and must be planned for **coverage feasibility**, not just "highest-value methods first":
+{% for item in strict_coverage_classes %}
+- `{{ item.class_fqn }}` — about {{ item.line_count }} lines, {{ item.public_method_count }} public methods
+{% endfor %}
+For these classes, the plan must explicitly justify how it can plausibly reach `{{ coverage_gate }}%` line coverage.
+{% endif %}
+
+### PRIMARY GOALS
+{% if quality_mode == "ci_incremental" %}
+- Plan tests that exercise the CI-changed production diff lines enough for test-enforcement
+- Reach at least `{{ ci_diff_coverage_gate }}%` coverage on changed diff lines
+- Kill every meaningful PIT mutant on changed diff lines for `{{ ci_diff_mutation_gate }}%` diff mutation
+- Do not chase unrelated class-wide coverage or mutation gaps unless they are needed to execute and assert the changed diff behavior
+{% else %}
+- Plan enough branch reach to meet the configured coverage gate of `{{ coverage_gate }}%`
+{% endif %}
+- Identify high-value public paths before writing code
+- Do enough focused exploration from the target cache and current repo to choose the first-pass methods; do NOT compile-proof every DTO, builder, enum, or value object during planning
+- Keep the planning output compact enough that OpenCode can finish quickly
+
+### TARGET CONTEXT FILES
+Use these per-class distilled cache files before broad exploration:
+{{ target_context_files }}
+
+{% if stage_introspect_abs %}
+### STAGE INTROSPECT
+- Prior lessons for this stage: `{{ stage_introspect_abs }}`
+- Read this file before broad exploration. Apply only lessons relevant to the current target and do not repeat already-avoided mistakes.
+{% endif %}
+
+{% if ci_context_abs %}
+### CI CONTEXT
+- Read the run-scoped CI context before broad exploration: `{{ ci_context_abs }}`
+- Treat it as higher priority than reusable repo cache because it belongs to this CI repair run only.
+- Use it only to plan unit-test generation. If it asks for production-code edits, report that as unsupported.
+{% endif %}
+
+### REPO INDEX LOOKUP
+- Preferred structured lookup command: `{{ index_query_command }} --class-fqn <CLASS> --json-output`
+- Use it to inspect public methods, fields, dependencies, nearby tests, process flows, and symbol/import mappings before opening more source files.
+- Only fall back to `read` / `grep` / `glob` when one exact detail is still missing after the index query.
+
+{% if roi_enabled %}
+### ROI SCORES
+Read the ROI scores file for each target class before planning.
+- Prioritize methods with non-zero uncovered reach first. Cheap wrappers with `0` missed lines are low gate value and should not anchor WAVE 1.
+- Within methods that still add uncovered coverage, cheap-band methods usually come first, then medium-band methods if cheap methods alone cannot meet the gate.
+- Skip expensive-band methods unless they are business-critical or the gate cannot be met otherwise.
+- If the gate cannot realistically be met (all remaining methods are expensive), note a realistic achievable gate in COVERAGE RISKS.
+{% endif %}

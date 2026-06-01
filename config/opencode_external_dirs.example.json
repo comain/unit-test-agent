@@ -1,0 +1,6 @@
+{
+  "allow": [
+    "~/src/shared-api/**",
+    "~/src/platform-libs/**"
+  ]
+}

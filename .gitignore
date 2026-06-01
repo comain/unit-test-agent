@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+.uta_cache/
+.uta_runner/
+.uta_reports/
+.uta-local/
+.antigravitycli/
+.claude/
+.env
+.env.*
+repo.txt
+e2e_real_run.*
+*.log
+*.swp

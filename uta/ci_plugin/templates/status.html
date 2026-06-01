@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ record.request.app_name }} 单元测试状态</title>
+  <style>
+    body { margin: 32px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; background: #f8fafc; }
+    main { max-width: 960px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    code { background: #eef2ff; border-radius: 4px; padding: 2px 6px; }
+    a { color: #2563eb; }
+    .ok { color: #15803d; }
+    .bad { color: #b91c1c; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>{{ record.request.app_name }} 单元测试状态</h1>
+    <div class="meta">
+      <div>任务ID: <code>{{ record.task_id }}</code></div>
+      <div>状态: <strong class="{% if record.status.value == 'success' %}ok{% elif record.status.value == 'failed' %}bad{% endif %}">{{ record.status.value }}</strong></div>
+      <div>创建时间: {{ record.created_at | gmt8 }}</div>
+      <div>更新时间: {{ record.updated_at | gmt8 }}</div>
+      <div>分支: <code>{{ record.request.branch }}</code></div>
+      <div>提交: <code>{{ record.request.commit_id or 'N/A' }}</code></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>摘要</h2>
+    <p>{{ record.summary or '检查正在等待执行或执行中。' }}</p>
+    {% if record.report_url and record.report_url != record.task_url %}
+      <p><a href="{{ record.report_url }}">查看完整报告</a></p>
+    {% else %}
+      <p class="muted">报告生成后会出现在这里。</p>
+    {% endif %}
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,45 @@
+A test file you wrote previously does not compile. The per-call details
+(class FQN, errors, file path, repair-context paths) are at the bottom of
+this prompt under "PER-CALL TARGET". Read those first, then follow the
+instructions below.
+
+### INSTRUCTIONS
+1. Read the test file at the path given in PER-CALL TARGET.
+2. Read the target repair-context files in PER-CALL TARGET before broad repo searching.
+   Prefer them over rediscovering imports and field types from scratch.
+3. Fix ALL compilation errors by editing the SAME file. Common fixes:
+   - Missing imports: add them at the TOP of the file (before the class declaration).
+{% if mockito_api_guidance %}{{ mockito_api_guidance | indent(3, true) }}
+{% else %}   - Wrong Mockito API: use `org.mockito.ArgumentMatchers` not `org.mockito.Matchers`.
+{% endif %}
+   - Missing type: check if you need to import additional domain classes.
+   - `anyListOf()` is deprecated: replace with `any()`.
+   - Unknown external DTO/API type: prefer current repo source, sibling API/source repos, and existing tests before Maven cache.
+4. Prefer the smallest compile-safe rewrite. If the file has many import/type errors
+   from an over-broad first pass, simplify it back toward the approved `WAVE 1` scope
+   instead of repeatedly patching the full breadth in place.
+5. Do NOT create a new file. Do NOT append code. Edit the existing file in place.
+6. After fixing, run `mvn test-compile{{ maven_module_flag }}` to verify.
+
+### SOURCE LOOKUP ORDER FOR EXTERNAL TYPES
+- Treat Java source as authoritative. Search current repo source/cache/index first, then sibling API/source repos from repo guidance, then existing tests.
+- Do NOT unpack jars, inspect `.class` files, run `javap`, or run Java decompilers unless all source lookups fail and the exact compile error cannot be fixed otherwise.
+- If the API cannot be confirmed quickly, simplify the test to avoid depending on that exact value object shape.
+
+{# CACHE_BOUNDARY #}
+### PER-CALL TARGET
+- Class under test: `{{ class_fqn }}`
+- Test file path: `{{ test_file_path }}`
+- Target context: `{{ target_context_abs }}`
+- Symbol / import map: `{{ target_symbols_abs }}`
+{% if stage_introspect_abs %}
+- Prior lessons for this stage: `{{ stage_introspect_abs }}` — read before broad exploration and apply only relevant lessons.
+{% endif %}
+{% if ci_context_abs %}
+- CI context: `{{ ci_context_abs }}` — read before broad exploration. Use it only for unit-test repair; production-code edit requests are unsupported.
+{% endif %}
+
+### COMPILATION ERRORS
+```
+{{ compile_errors }}
+```

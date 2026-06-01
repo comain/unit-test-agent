@@ -1,0 +1,47 @@
+This is a coverage-reach problem.
+
+### INSTRUCTIONS
+Enhance the existing test file to raise line coverage toward the required gate.
+- Read the source file and test file paths in PER-CALL TARGET first.
+- Read the target context and symbol map. Reuse them instead of rediscovering imports, field types, and helper signatures from scratch.
+- Target the uncovered method / line clusters listed in PER-CALL TARGET before exploring broadly.
+- Expand path reach before polishing assertions.
+- Add tests that exercise currently untested public-method branches, guard clauses, error paths, and business-state branches.
+- Prefer broader reach over adding more assertions to the same already-covered happy path.
+- Add tests for missing public-method paths and important branch pairs.
+- Cover null/empty/error branches when they represent real business behavior.
+- If the class is branch-heavy, prefer new test methods over only strengthening existing assertions.
+- Keep the test compile-safe; edit the same file rather than creating a new one.
+- After fixing, run the compile and test commands shown in PER-CALL TARGET.
+- After the compile and targeted test commands pass, stop immediately.
+- Do not inspect JaCoCo, local coverage artifacts, or surefire reports after the required commands pass.
+- Do not try to predict whether the coverage gate is cleared; the outer workflow will evaluate coverage separately.
+- For exact missing DTO/API facts, prefer current repo source, sibling API/source repos, and existing tests before Maven cache.
+- Do NOT unpack jars, inspect `.class` files, run `javap`, or run Java decompilers during coverage repair unless all source lookups fail and the exact compile error cannot be fixed otherwise.
+
+{# CACHE_BOUNDARY #}
+The test you generated for class `{{ class_fqn }}` has line coverage of {{ '%.1f'|format(current_coverage) }}%, below the gate of {{ coverage_gate }}%.
+
+### PER-CALL TARGET
+- Class: `{{ class_fqn }}`
+- Source file: `{{ source_path }}`
+- Test file: `{{ test_file_path }}`
+- Required line coverage: {{ coverage_gate }}%
+- Current line coverage: {{ '%.1f'|format(current_coverage) }}%
+- Target context: `{{ target_context_abs }}`
+- Symbol / import map: `{{ target_symbols_abs }}`
+{% if stage_introspect_abs %}
+- Prior lessons for this stage: `{{ stage_introspect_abs }}` — read before broad exploration and apply only relevant lessons.
+{% endif %}
+{% if ci_context_abs %}
+- CI context: `{{ ci_context_abs }}` — read before broad exploration. Use it only for unit-test repair; production-code edit requests are unsupported.
+{% endif %}
+{% if roi_abs %}
+- ROI scores: `{{ roi_abs }}` — focus on cheap/medium uncovered methods first.
+{% endif %}
+- After fixing, run:
+  - `mvn test-compile{{ maven_module_flag }}`
+  - `mvn test -Dtest={{ test_class_name }} -DfailIfNoTests=false{{ maven_module_flag }}`
+
+### SCRIPT-EXTRACTED UNCOVERED CLUSTERS
+{{ uncovered_summary }}

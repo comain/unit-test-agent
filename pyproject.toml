@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unit-test-agent"
+version = "0.1.0"
+requires-python = ">=3.9"
+description = "CLI tool to generate unit tests for Java and Python codebases"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "click>=8.1",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "tree-sitter>=0.22",
+    "tree-sitter-java>=0.23",
+    "tree-sitter-python>=0.23",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "rich>=13.0",
+    "jinja2>=3.0",
+    "pyjwt[crypto]>=2.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22"]
+
+[project.scripts]
+uta = "uta.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["uta*"]
+
+[tool.setuptools.package-data]
+"uta.ci_plugin" = ["templates/*.html"]
+"uta.prompts" = ["*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests requiring OpenCode server or real repo (deselect with '-m \"not integration\"')",
+    "e2e: end-to-end tests covering full phase acceptance criteria (deselect with '-m \"not e2e\"')",
+    "e2e_git_home: full workflow against repos under $HOME (git + Maven; may skip on missing deps)",
+]

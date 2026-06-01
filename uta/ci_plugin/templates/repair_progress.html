@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="refresh" content="10" />
+  <title>{{ progress.appName }} 修复进度</title>
+  <style>
+    body { margin: 32px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; background: #f8fafc; }
+    main { max-width: 1160px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; margin-top: 16px; }
+    .stage { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .stage strong { display: block; margin-bottom: 6px; }
+    .done { border-color: #86efac; background: #f0fdf4; color: #166534; }
+    .active { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+    .failed { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+    .pending { color: #64748b; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; background: #fff; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; }
+    code, pre { background: #eef2ff; border-radius: 4px; }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .muted { color: #64748b; }
+    .ok { color: #15803d; }
+    .bad { color: #b91c1c; }
+  </style>
+</head>
+<body>
+<main>
+  {% set repo = progress.repoTask %}
+  {% set task = repo.task if repo else {} %}
+  {% set is_ci_incremental = task.selection and task.selection.quality_mode == 'ci_incremental' %}
+  {% set is_delegated_gate = task.selection and task.selection.quality_gate_backend == 'maven_enforcer' %}
+  {% set is_java_task = (task.language or (task.selection.language if task.selection else 'java')) == 'java' %}
+  {% set target_label = 'Class' if is_java_task else 'Target' %}
+  <section class="panel">
+    <h1>{{ progress.appName }} 修复进度</h1>
+    <div class="meta">
+      <div>CI task: <code>{{ progress.taskId }}</code></div>
+      <div>修复会话: <code>{{ progress.session.sessionId }}</code></div>
+      <div>repoTask: <code>{{ progress.session.repoTaskId or 'N/A' }}</code></div>
+      <div>状态: <strong class="{% if progress.session.status in ['green'] %}ok{% elif progress.session.status in ['repair_failed','rerun_failed','rerun_unavailable'] %}bad{% endif %}">{{ progress.session.status }}</strong></div>
+      <div>分支: <code>{{ progress.branch }}</code></div>
+      <div>自动刷新: 10s</div>
+    </div>
+    {% if not repo %}
+      <p class="muted">修复任务还未创建或 repoTask 不可用。</p>
+    {% endif %}
+  </section>
+
+  {% if repo %}
+  <section class="panel">
+    <h2>阶段</h2>
+    <div class="meta">
+      <div>repoTask 状态: <code>{{ task.status }}</code></div>
+      <div>当前阶段: <code>{{ task.current_stage or 'N/A' }}</code></div>
+      <div>当前详情: {{ task.current_detail or 'N/A' }}</div>
+      <div>更新时间: {{ task.updated_at | gmt8 }}</div>
+    </div>
+    <div class="stages">
+      {% for stage in progress.stages %}
+      <div class="stage {{ stage.status }}">
+        <strong>{{ stage.label }}</strong>
+        <span>{{ stage.status }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ '类任务' if is_java_task else '目标任务' }}</h2>
+    <table>
+      {% if is_delegated_gate %}
+      <tr><th>ID</th><th>{{ target_label }}</th><th>Status</th><th>Stage</th><th>Detail</th><th>Error</th></tr>
+      {% else %}
+      <tr><th>ID</th><th>{{ target_label }}</th><th>Status</th><th>Stage</th><th>Coverage</th><th>Mutation</th><th>Error</th></tr>
+      {% endif %}
+      {% for row in repo.classes %}
+      <tr>
+        <td>{{ row.id }}</td>
+        <td><code>{{ row.target_display_name or row.class_fqn }}</code></td>
+        <td>{{ row.status }}</td>
+        <td>{{ row.current_stage or row.stage or '' }}</td>
+        {% if is_delegated_gate %}
+        <td>{{ row.current_detail or '' }}</td>
+        {% else %}
+        <td>{{ row.coverage_line if row.coverage_line is not none else '' }}</td>
+        <td>{{ row.mutation_score if row.mutation_score is not none else '' }}</td>
+        {% endif %}
+        <td>{{ row.last_error or row.error or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="{% if is_delegated_gate %}6{% else %}7{% endif %}" class="muted">{{ '暂无类任务' if is_java_task else '暂无目标任务' }}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  {% if progress.session.rerunEnforcement %}
+  <section class="panel">
+    <h2>完成确认</h2>
+    <p>结果: <strong class="{% if progress.session.rerunEnforcement.passed %}ok{% else %}bad{% endif %}">{{ 'passed' if progress.session.rerunEnforcement.passed else 'failed' }}</strong></p>
+    <p>摘要: {{ progress.session.rerunEnforcement.summary or '' }}</p>
+    <p>
+      最终覆盖率:
+      {% if progress.rerunEvidence.coverage %}
+        <strong>{{ progress.rerunEvidence.coverage.formattedRate }}</strong>
+        <span class="muted">({{ progress.rerunEvidence.coverage.covered }}/{{ progress.rerunEvidence.coverage.total }}, {{ progress.rerunEvidence.coverage.modules }} 个模块)</span>
+      {% else %}
+        <span class="muted">未采集</span>
+      {% endif %}
+    </p>
+    <p>
+      最终变异得分:
+      {% if progress.rerunEvidence.mutation %}
+        <strong>{{ progress.rerunEvidence.mutation.formattedRate }}</strong>
+        <span class="muted">({{ progress.rerunEvidence.mutation.killed }}/{{ progress.rerunEvidence.mutation.generated }}, {{ progress.rerunEvidence.mutation.modules }} 个模块)</span>
+      {% else %}
+        <span class="muted">未采集</span>
+      {% endif %}
+    </p>
+    <p>命令: <code>{{ progress.session.rerunEnforcement.command | join(' ') }}</code></p>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <h2>事件</h2>
+    <table>
+      <tr><th>时间</th><th>级别</th><th>阶段</th><th>事件</th><th>消息</th></tr>
+      {% for event in repo.latest_events %}
+      <tr>
+        <td>{{ (event.ts or event.created_at) | gmt8 }}</td>
+        <td>{{ event.severity or '' }}</td>
+        <td>{{ event.stage or '' }}</td>
+        <td>{{ event.event_type or '' }}</td>
+        <td>{{ event.message or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">暂无事件</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>
