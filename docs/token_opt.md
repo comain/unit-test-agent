@@ -73,7 +73,7 @@ Why:
 - Do not rely only on a single percentage value.
 
 Why:
-- “Coverage is 24.7%” is too weak for a huge class like `SampleServiceImpl`.
+- “Coverage is 24.7%” is too weak for a huge class like `PickingBizImpl`.
 - The model needs exact uncovered targets to spend tokens efficiently.
 
 ### 6. Keep compact planning subagent only for complex classes

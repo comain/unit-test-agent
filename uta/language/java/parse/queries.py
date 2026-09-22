@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict
 from uta.language.java.parse.models import CodeGraph, ProcessFlow
 
 class GraphQueries:

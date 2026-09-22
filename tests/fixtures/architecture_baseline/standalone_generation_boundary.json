@@ -1,0 +1,41 @@
+{
+  "java": {
+    "config_snapshot_keys": [
+      "generation_cycle_v2_enabled",
+      "generation_engine_version"
+    ],
+    "directory_layout": [
+      "workflow-state",
+      "workflow-state/checkpoints",
+      "workflow-state/results"
+    ],
+    "generation_cycle_v2_enabled": true,
+    "generation_engine_version": 2,
+    "root_is_under_runner_home": true,
+    "root_mode": "0o700",
+    "task_db_name": "tasks.sqlite"
+  },
+  "projection_keys": [
+    "delivery_branch",
+    "result_summary",
+    "results",
+    "task_db_path",
+    "task_id"
+  ],
+  "python": {
+    "config_snapshot_keys": [
+      "generation_cycle_v2_enabled",
+      "generation_engine_version"
+    ],
+    "directory_layout": [
+      "workflow-state",
+      "workflow-state/checkpoints",
+      "workflow-state/results"
+    ],
+    "generation_cycle_v2_enabled": true,
+    "generation_engine_version": 2,
+    "root_is_under_runner_home": true,
+    "root_mode": "0o700",
+    "task_db_name": "tasks.sqlite"
+  }
+}

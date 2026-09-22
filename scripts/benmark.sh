@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reusable benchmark runner for a single Java class.
+# Reusable benchmark runner for PickingBizImpl.
+# Defaults match the current traced sample-outbound-core benchmark flow.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TS="${TS:-$(date +%Y%m%d_%H%M%S)}"
 
-REPO="${REPO:-$HOME/src/sample-service}"
-MODULE="${MODULE:-service}"
-CLASS_FQN="${CLASS_FQN:-com.example.service.SampleService}"
+REPO="${REPO:-/home/user/wms/sample-outbound-core}"
+MODULE="${MODULE:-biz}"
+CLASS_FQN="${CLASS_FQN:-com.example.sample.outbound.core.biz.impl.PickingBizImpl}"
 COVERAGE_GATE="${COVERAGE_GATE:-80}"
 MUTATION_GATE="${MUTATION_GATE:-70}"
 MAX_FILES="${MAX_FILES:-1}"
 
-OPENCODE_SRC_DIR="${OPENCODE_SRC_DIR:-$HOME/src/opencode/packages/opencode}"
-BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
+OPENCODE_SRC_DIR="${OPENCODE_SRC_DIR:-/path/to/opencode/packages/opencode}"
+BUN_BIN="${BUN_BIN:-/home/user/.bun/bin/bun}"
 OPENCODE_BIN="${OPENCODE_BIN:-}"
 OPENCODE_MODE="${OPENCODE_MODE:-patched}"
 MODEL="${MODEL:-deepseek/deepseek-v4-pro}"
@@ -208,7 +209,7 @@ if [[ "${TRACE_ENABLED}" == "true" ]]; then
 fi
 
 args=(
-  -m uta.cli run
+  -m uta.app.cli run
   --repo "${REPO}"
   --module "${MODULE}"
   --class-fqn "${CLASS_FQN}"

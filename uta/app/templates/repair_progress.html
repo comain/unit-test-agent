@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ progress.appName }} 修复进度</title>
+  <style>
+    body { margin: 32px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; background: #f8fafc; }
+    main { max-width: 1160px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; margin-top: 16px; }
+    .stage { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .stage strong { display: block; margin-bottom: 6px; }
+    .done { border-color: #86efac; background: #f0fdf4; color: #166534; }
+    .active { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+    .failed { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+    .pending { color: #64748b; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; background: #fff; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; }
+    code, pre { background: #eef2ff; border-radius: 4px; }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .muted { color: #64748b; }
+    .ok { color: #15803d; }
+    .bad { color: #b91c1c; }
+    .live-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .live-status { font-size: 13px; color: #64748b; }
+    .timeline { margin: 10px 0 18px; padding: 0; list-style: none; }
+    .timeline li { border-left: 3px solid #cbd5e1; padding: 8px 12px; margin: 6px 0; background: #f8fafc; }
+    .timeline .event-meta { display: block; color: #64748b; font-size: 12px; margin-bottom: 3px; }
+    .session-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .session-tab { border: 1px solid #cbd5e1; border-radius: 999px; padding: 7px 12px; background: #fff; color: #334155; cursor: pointer; }
+    .session-tab.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+    .session-panel[hidden] { display: none; }
+    .events-scroll { max-height: 60vh; overflow-y: auto; overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .events-scroll table { margin: 0; }
+    .events-scroll thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+  </style>
+</head>
+<body>
+<main>
+  {% set repo = progress.repoTask %}
+  {% set task = repo.task if repo else {} %}
+  {% set is_ci_incremental = task.selection and task.selection.quality_mode == 'ci_incremental' %}
+  {% set is_delegated_gate = task.selection and task.selection.quality_gate_backend == 'maven_enforcer' %}
+  {% set is_java_task = (task.language or (task.selection.language if task.selection else 'java')) == 'java' %}
+  {% set target_label = 'Class' if is_java_task else 'Target' %}
+  <section class="panel">
+    <h1>{{ progress.appName }} 修复进度</h1>
+    <div class="meta">
+      <div>RDC 任务: <code>{{ progress.taskId }}</code></div>
+      <div>修复会话: <code>{{ progress.session.sessionId }}</code></div>
+      <div>repoTask: <code>{{ progress.session.repoTaskId or 'N/A' }}</code></div>
+      <div>状态: <strong class="{% if progress.session.status in ['green', 'passed_with_equivalent_mutants'] %}ok{% elif progress.session.status in ['repair_failed','rerun_failed','rerun_unavailable'] %}bad{% endif %}">{{ progress.session.status }}</strong></div>
+      {% if progress.session.equivalenceOverride %}<div><strong class="warn">等价变异豁免</strong> 原始变异分数 <code>{{ progress.session.equivalenceOverride.rawMutationRate }}%</code> / 门禁 <code>{{ progress.session.equivalenceOverride.mutationGate }}%</code>（变异体未被杀死）</div>{% endif %}
+      <div>分支: <code>{{ progress.branch }}</code></div>
+      <div>进度更新: 实时</div>
+    </div>
+    {% if progress.session.canonicalSessionUrl %}
+      <p>
+        该修复会话已转到幂等会话
+        <code>{{ progress.session.canonicalSessionId or '' }}</code>
+        <a class="progress-link" href="{{ progress.session.canonicalSessionUrl }}">查看幂等会话状态</a>
+      </p>
+    {% elif progress.session.canonicalTaskUrl %}
+      <p>
+        该修复会话已转到幂等任务
+        <code>{{ progress.session.canonicalTaskId or '' }}</code>
+        <a class="progress-link" href="{{ progress.session.canonicalTaskUrl }}">查看幂等任务状态</a>
+      </p>
+    {% endif %}
+    {% if not repo and progress.session.alreadyGreenAfterRefresh %}
+      <p class="ok">刷新分支后重新执行门禁已通过，无需创建修复任务。</p>
+    {% elif not repo and progress.session.status == 'creating_repair_task' %}
+      <p class="muted">正在创建修复任务：{{ progress.session.repoTaskDetail or '刷新修复工作区并准备修复任务' }}。</p>
+    {% elif not repo and progress.session.status == 'repair_task_create_failed' %}
+      <p class="bad">创建修复任务失败：{{ progress.session.repoTaskError or progress.session.repoTaskDetail or '未知错误' }}</p>
+    {% elif not repo %}
+      <p class="muted">修复任务还未创建或 repoTask 不可用。</p>
+    {% endif %}
+  </section>
+
+  {% if progress.session.refreshRerunEnforcement %}
+  <section class="panel">
+    <h2>刷新后门禁确认</h2>
+    <p>结果: <strong class="{% if progress.session.refreshRerunEnforcement.passed %}ok{% else %}bad{% endif %}">{{ 'passed' if progress.session.refreshRerunEnforcement.passed else 'failed' }}</strong></p>
+    <p>摘要: {{ progress.session.refreshRerunEnforcement.summary or '' }}</p>
+    <p>
+      覆盖率:
+      {% if progress.refreshRerunEvidence.coverage %}
+        <strong>{{ progress.refreshRerunEvidence.coverage.formattedRate }}</strong>
+        <span class="muted">({{ progress.refreshRerunEvidence.coverage.covered }}/{{ progress.refreshRerunEvidence.coverage.total }}, {{ progress.refreshRerunEvidence.coverage.modules }} 个模块)</span>
+      {% else %}
+        <span class="muted">未采集</span>
+      {% endif %}
+    </p>
+    <p>
+      变异得分:
+      {% if progress.refreshRerunEvidence.mutation %}
+        <strong>{{ progress.refreshRerunEvidence.mutation.formattedRate }}</strong>
+        <span class="muted">({{ progress.refreshRerunEvidence.mutation.killed }}/{{ progress.refreshRerunEvidence.mutation.generated }}, {{ progress.refreshRerunEvidence.mutation.modules }} 个模块)</span>
+      {% else %}
+        <span class="muted">未采集</span>
+      {% endif %}
+    </p>
+    <p>命令: <code>{{ progress.session.refreshRerunEnforcement.command | join(' ') }}</code></p>
+  </section>
+  {% endif %}
+
+  {% if repo %}
+  <section class="panel">
+    <h2>阶段</h2>
+    <div class="meta">
+      <div>repoTask 状态: <code>{{ task.status }}</code></div>
+      <div>当前阶段: <code>{{ task.current_stage or 'N/A' }}</code></div>
+      <div>当前详情: {{ task.current_detail or 'N/A' }}</div>
+      <div>更新时间: {{ task.updated_at | gmt8 }}</div>
+    </div>
+    <div class="stages">
+      {% for stage in progress.stages %}
+      <div class="stage {{ stage.status }}">
+        <strong>{{ stage.label }}</strong>
+        <span>{{ stage.status }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ '类任务' if is_java_task else '目标任务' }}</h2>
+    <table>
+      {% if is_delegated_gate %}
+      <tr><th>ID</th><th>{{ target_label }}</th><th>Status</th><th>Stage</th><th>Detail</th><th>Error</th></tr>
+      {% else %}
+      <tr><th>ID</th><th>{{ target_label }}</th><th>Status</th><th>Stage</th><th>Coverage</th><th>Mutation</th><th>Error</th></tr>
+      {% endif %}
+      <tbody id="class-rows" data-delegated="{{ 1 if is_delegated_gate else 0 }}">
+      {% for row in repo.classes %}
+      <tr>
+        <td>{{ row.id }}</td>
+        <td><code>{{ row.target_display_name or row.class_fqn }}</code></td>
+        <td>{{ row.status }}</td>
+        <td>{{ row.current_stage or row.stage or '' }}</td>
+        {% if is_delegated_gate %}
+        <td>{{ row.current_detail or '' }}</td>
+        {% else %}
+        <td>{{ row.coverage_line if row.coverage_line is not none else '' }}</td>
+        <td>{{ row.mutation_display if row.mutation_display is not none else '' }}</td>
+        {% endif %}
+        <td>{{ row.last_error or row.error or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="{% if is_delegated_gate %}6{% else %}7{% endif %}" class="muted">{{ '暂无类任务' if is_java_task else '暂无目标任务' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+
+  {% if progress.session.rerunEnforcement %}
+  <section class="panel">
+    <h2>完成确认</h2>
+    <p>结果: <strong class="{% if progress.session.rerunEnforcement.passed %}ok{% else %}bad{% endif %}">{{ 'passed' if progress.session.rerunEnforcement.passed else 'failed' }}</strong></p>
+    <p>摘要: {{ progress.session.rerunEnforcement.summary or '' }}</p>
+    <p>
+      最终覆盖率:
+      {% if progress.rerunEvidence.coverage %}
+        <strong>{{ progress.rerunEvidence.coverage.formattedRate }}</strong>
+        <span class="muted">({{ progress.rerunEvidence.coverage.covered }}/{{ progress.rerunEvidence.coverage.total }}, {{ progress.rerunEvidence.coverage.modules }} 个模块)</span>
+      {% else %}
+        <span class="muted">未采集</span>
+      {% endif %}
+    </p>
+    <p>
+      最终变异得分:
+      {% if progress.rerunEvidence.mutation %}
+        <strong>{{ progress.rerunEvidence.mutation.formattedRate }}</strong>
+        <span class="muted">({{ progress.rerunEvidence.mutation.killed }}/{{ progress.rerunEvidence.mutation.generated }}, {{ progress.rerunEvidence.mutation.modules }} 个模块)</span>
+      {% else %}
+        <span class="muted">未采集</span>
+      {% endif %}
+    </p>
+    <p>命令: <code>{{ progress.session.rerunEnforcement.command | join(' ') }}</code></p>
+  </section>
+  {% endif %}
+
+  <section class="panel" id="events-panel">
+    <div class="live-head">
+      <h2>事件</h2>
+      <span class="live-status" id="events-status">自动刷新中…</span>
+    </div>
+    <div class="events-scroll">
+    <table>
+      <thead>
+        <tr><th>时间</th><th>级别</th><th>阶段</th><th>事件</th><th>消息</th></tr>
+      </thead>
+      <tbody id="events-body" data-newest-id="{{ (repo.latest_events or [])|map(attribute='id')|max if (repo.latest_events or []) else 0 }}">
+      {% for event in repo.latest_events if (event.message or '') not in ['Agent update', 'Agent progress'] %}
+        <tr>
+          <td>{{ (event.ts or event.created_at) | gmt8 }}</td>
+          <td>{{ event.severity or '' }}</td>
+          <td>{{ event.stage or '' }}</td>
+          <td>{{ event.event_type or '' }}</td>
+          <td>{{ event.message or '' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">暂无事件</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <script>
+    // One feed, and it refreshes. The SSE panel that used to sit above this
+    // carried only agent progress -- no target selection, no model, no
+    // fallback -- so it read as a thinner duplicate of this table. This keeps
+    // the fuller event stream and polls it instead.
+    (function () {
+      var body = document.getElementById("events-body");
+      // The page ships with the history already rendered; start from its
+      // newest id so the first poll asks only for what came after.
+      var lastSeenId = Number((document.getElementById("events-body") || {}).dataset
+        ? (document.getElementById("events-body").dataset.newestId || 0)
+        : 0) || 0;
+      var status = document.getElementById("events-status");
+      if (!body || !window.fetch) return;
+      var terminal = {task_terminal: 1, task_failed: 1};
+      // Heartbeat lines with no stage, tool or detail. They say only that the
+      // agent is alive, which the running status already says, and they push
+      // the events that carry information out of view.
+      var noise = {"Agent update": 1, "Agent progress": 1};
+
+      function meaningful(event) {
+        return !noise[String(event.message || "").trim()];
+      }
+
+      function cell(text) {
+        var td = document.createElement("td");
+        td.textContent = text == null ? "" : String(text);
+        return td;
+      }
+
+      var classRows = document.getElementById("class-rows");
+      var delegated = classRows && classRows.dataset.delegated === "1";
+
+      function renderClasses(rows) {
+        // Server-rendered once, and the statuses moved underneath it: the
+        // table sat on CREATED for the whole run while the events beside it
+        // showed the work happening.
+        if (!classRows || !rows.length) return;
+        classRows.textContent = "";
+        rows.forEach(function (row) {
+          var tr = document.createElement("tr");
+          tr.appendChild(cell(row.id));
+          var name = document.createElement("td");
+          var code = document.createElement("code");
+          code.textContent = row.target_display_name || row.class_fqn || "";
+          name.appendChild(code);
+          tr.appendChild(name);
+          tr.appendChild(cell(row.status));
+          tr.appendChild(cell(row.current_stage || row.stage));
+          if (delegated) {
+            tr.appendChild(cell(row.current_detail));
+          } else {
+            tr.appendChild(cell(row.coverage_line));
+            tr.appendChild(cell(row.mutation_display));
+          }
+          tr.appendChild(cell(row.last_error || row.error));
+          classRows.appendChild(tr);
+        });
+      }
+
+      function row(event) {
+        var tr = document.createElement("tr");
+        tr.appendChild(cell(event.ts || event.created_at));
+        tr.appendChild(cell(event.severity));
+        tr.appendChild(cell(event.stage));
+        tr.appendChild(cell(event.event_type));
+        tr.appendChild(cell(event.message));
+        return tr;
+      }
+
+      function refresh() {
+        // Only events newer than the ones already on the page. A session runs
+        // to several hundred events, and re-sending all of them every five
+        // seconds moved ~340KB per poll to redraw a handful of new rows.
+        // The first call omits `after` and gets the whole history.
+        var url = "progress/data" + (lastSeenId ? "?after=" + encodeURIComponent(lastSeenId) : "");
+        fetch(url, {headers: {"Accept": "application/json"}})
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (!data) return;
+            var repo = data.repoTask || {};
+            var incoming = repo.latest_events || [];
+            // Newest first, so the highest id leads.
+            incoming.forEach(function (event) {
+              var id = Number(event.id || 0);
+              if (id > lastSeenId) lastSeenId = id;
+            });
+            var events = incoming.filter(meaningful);
+            renderClasses(repo.classes || []);
+            if (events.length) {
+              var scroller = document.querySelector(".events-scroll");
+              // Keep the reader where they are unless they were following the
+              // newest rows, which sit at the top of this table.
+              var wasAtTop = scroller ? scroller.scrollTop < 40 : false;
+              var previousTop = scroller ? scroller.scrollTop : 0;
+              var previousHeight = scroller ? scroller.scrollHeight : 0;
+              var first = body.firstChild;
+              events.forEach(function (event) {
+                var tr = row(event);
+                if (first) {
+                  body.insertBefore(tr, first);
+                } else {
+                  body.appendChild(tr);
+                }
+              });
+              if (scroller) {
+                scroller.scrollTop = wasAtTop
+                  ? 0
+                  : previousTop + (scroller.scrollHeight - previousHeight);
+              }
+            }
+            // The newest event decides whether the session is over; it is the
+            // first element, not the last.
+            var newest = incoming[0] || {};
+            if (terminal[newest.event_type]) {
+              status.textContent = "已完成";
+              clearInterval(timer);
+            }
+          })
+          .catch(function () { status.textContent = "刷新失败，正在重试…"; });
+      }
+
+      var timer = setInterval(refresh, 5000);
+      refresh();
+    }());
+  </script>
+  {% endif %}
+</main>
+</body>
+</html>

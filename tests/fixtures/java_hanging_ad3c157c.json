@@ -1,0 +1,7 @@
+{
+  "taskId": "ad3c157c37444c73aa19e0b6a3d49176",
+  "returncode": 143,
+  "stdout": "Running com.example.idss.ipes.roster.domain.service.give.GiveWorkflowBizTest\nTests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.886 sec\nRunning com.example.idss.ipes.roster.domain.service.motor.MotorShopRosterServiceTest\nTests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.202 sec\nRunning com.example.idss.ipes.roster.domain.service.staff.NewStaffFranchiseGuardTest\nTests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.522 sec\nRunning com.example.idss.ipes.roster.domain.service.metadata.CityDateGiveQuotaDetailExtendServiceTest\nTests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 sec\nTests run: 10, Failures: 0, Errors: 0, Skipped: 0\nRunning com.example.idss.ipes.roster.controller.manager.ManagerExchangeBatchControllerTest\n",
+  "stderr": "",
+  "hangingClass": "com.example.idss.ipes.roster.controller.manager.ManagerExchangeBatchControllerTest"
+}

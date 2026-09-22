@@ -1,0 +1,51 @@
+"""Compatibility exports for the shared mutation candidate contracts."""
+
+from __future__ import annotations
+
+from uta_enforce_core.mutation_candidates import (
+    FilterMechanism,
+    MUTATION_CANDIDATE_PLANNER_VERSION,
+    MUTATION_NOT_SUPPORTED_FOR_RUNTIME,
+    MUTMUT3_METADATA_SELECTED_EXECUTION,
+    MUTMUT3_OPERATOR_FILTERED_GENERATION,
+    MUTMUT15_LEGACY_CHANGED_LINE_SCOPE,
+    MutationCandidate,
+    MutationCandidatePlan,
+    MutationOpportunity,
+    MutationSamplingLayer,
+    MutationVerificationContext,
+    SuppressedMutationOpportunity,
+    candidate_plan_allows_zero_scored_mutation,
+    candidate_plan_counts,
+    candidate_plan_requires_mutation_execution,
+    candidate_plan_with_execution_evidence,
+    compare_candidate_plan_payloads,
+    config_fingerprint,
+    make_candidate_id,
+    make_candidate_plan_id,
+    make_opportunity_id,
+)
+
+__all__ = [
+    "FilterMechanism",
+    "MUTATION_CANDIDATE_PLANNER_VERSION",
+    "MUTATION_NOT_SUPPORTED_FOR_RUNTIME",
+    "MUTMUT3_METADATA_SELECTED_EXECUTION",
+    "MUTMUT3_OPERATOR_FILTERED_GENERATION",
+    "MUTMUT15_LEGACY_CHANGED_LINE_SCOPE",
+    "MutationCandidate",
+    "MutationCandidatePlan",
+    "MutationOpportunity",
+    "MutationSamplingLayer",
+    "MutationVerificationContext",
+    "SuppressedMutationOpportunity",
+    "candidate_plan_allows_zero_scored_mutation",
+    "candidate_plan_counts",
+    "candidate_plan_requires_mutation_execution",
+    "candidate_plan_with_execution_evidence",
+    "compare_candidate_plan_payloads",
+    "config_fingerprint",
+    "make_candidate_id",
+    "make_candidate_plan_id",
+    "make_opportunity_id",
+]

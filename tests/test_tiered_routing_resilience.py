@@ -5,13 +5,13 @@ from unittest.mock import patch
 
 import pytest
 
-from uta.opencode.tiered_router import ModelHealthTracker, effective_model
+from agent_core.harness.tiered_router import ModelHealthTracker, effective_model
 
 
 @pytest.fixture(autouse=True)
 def reset_tracker():
     """Isolate each test from the module-level singleton."""
-    from uta.opencode import tiered_router
+    from agent_core.harness import tiered_router
     tiered_router._tracker.reset()
     tiered_router.reset_model_availability_cache()
     yield
@@ -37,7 +37,7 @@ def test_health_recovers_after_cooldown():
     tracker.mark_rate_limited("cursor/claude-4.5-sonnet", retry_after_seconds=1)
     assert tracker.is_healthy("cursor/claude-4.5-sonnet") is False
     # advance time past cooldown
-    with patch("uta.opencode.tiered_router.time") as mock_time:
+    with patch("agent_core.harness.tiered_router.time") as mock_time:
         mock_time.time.return_value = time.time() + 5
         assert tracker.is_healthy("cursor/claude-4.5-sonnet") is True
 
@@ -76,7 +76,7 @@ def test_router_switches_on_rate_limit():
     main_model = "token-pool/gpt-5.5"
     fallback = "google/gemini-2.5-flash"
 
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = f"token-pool:{main_model}"
         mock_settings.opencode_provider_fallback_enabled = False
         mock_settings.opencode_model = "legacy/gpt-4o"
@@ -91,7 +91,7 @@ def test_router_switches_on_rate_limit():
 
 
 def test_router_ignores_cheap_model_for_compile_fix():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = "token-pool:token-pool/gpt-5.5"
         mock_settings.opencode_provider_fallback_enabled = False
         mock_settings.opencode_model = "legacy/gpt-4o"
@@ -102,14 +102,14 @@ def test_router_ignores_cheap_model_for_compile_fix():
 
 
 def test_tracker_singleton_isolated_between_tests():
-    from uta.opencode import tiered_router
+    from agent_core.harness import tiered_router
     assert tiered_router._tracker.is_healthy("any-model") is True
 
 
 # --- model availability probe ---
 
 def test_parse_model_list_response_shapes():
-    from uta.opencode.tiered_router import parse_model_list_response
+    from agent_core.harness.tiered_router import parse_model_list_response
 
     assert parse_model_list_response({"data": [{"id": "gpt-5.5"}, {"id": "gpt-5.4"}]}) == {
         "gpt-5.5",
@@ -126,17 +126,17 @@ def test_parse_model_list_response_shapes():
 
 def test_available_provider_candidates_skips_models_absent_from_probe(monkeypatch):
     import httpx
-    from uta.opencode.tiered_router import available_provider_candidates
+    from agent_core.harness.tiered_router import available_provider_candidates
 
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_chain",
+        "agent_core.harness.tiered_router.settings.opencode_provider_chain",
         "openai:openai/gpt-5.5,openai/gpt-5.4;deepseek:deepseek/deepseek-v4-pro",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_fallback_enabled", True)
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.openai_base_url", "http://models.test/v1")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_base_urls", "")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_tokens", "")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_model_api_cache_seconds", 300)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_fallback_enabled", True)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.openai_base_url", "http://models.test/v1")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_base_urls", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_tokens", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_model_api_cache_seconds", 300)
 
     def fake_get(url, timeout, headers=None):
         assert url == "http://models.test/v1/models"
@@ -150,21 +150,42 @@ def test_available_provider_candidates_skips_models_absent_from_probe(monkeypatc
     ]
 
 
-def test_model_availability_probe_uses_provider_base_urls(monkeypatch):
-    import httpx
-    from uta.opencode.tiered_router import available_provider_candidates
+def test_available_provider_candidates_skips_unhealthy_models(monkeypatch):
+    from agent_core.harness import tiered_router
+    from agent_core.harness.tiered_router import available_provider_candidates
 
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_chain",
+        "agent_core.harness.tiered_router.settings.opencode_provider_chain",
+        "token-pool:token-pool/febale5,token-pool/gpt-5.5;openai:openai/gpt-5.4",
+    )
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_fallback_enabled", True)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.openai_base_url", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_base_urls", "")
+    tiered_router._tracker.mark_unhealthy("token-pool/febale5", reason="model_unavailable", retry_after_seconds=300)
+
+    candidates = available_provider_candidates()
+
+    assert [(item.provider, item.model, item.index) for item in candidates] == [
+        ("token-pool", "token-pool/gpt-5.5", 1),
+        ("openai", "openai/gpt-5.4", 2),
+    ]
+
+
+def test_model_availability_probe_uses_provider_base_urls(monkeypatch):
+    import httpx
+    from agent_core.harness.tiered_router import available_provider_candidates
+
+    monkeypatch.setattr(
+        "agent_core.harness.tiered_router.settings.opencode_provider_chain",
         "token-pool:token-pool/gpt-5.5;deepseek:deepseek/deepseek-v4-pro",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_fallback_enabled", True)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_fallback_enabled", True)
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_base_urls",
+        "agent_core.harness.tiered_router.settings.opencode_provider_base_urls",
         "token-pool.base_url=http://token-pool.test/v1;deepseek.base_url=http://deepseek.test/v1",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.openai_base_url", "http://legacy.test/v1")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_model_api_cache_seconds", 0)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.openai_base_url", "http://legacy.test/v1")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_model_api_cache_seconds", 0)
 
     calls = []
 
@@ -190,22 +211,22 @@ def test_model_availability_probe_uses_provider_base_urls(monkeypatch):
 
 def test_model_availability_probe_sends_provider_token(monkeypatch):
     import httpx
-    from uta.opencode.tiered_router import available_provider_candidates
+    from agent_core.harness.tiered_router import available_provider_candidates
 
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_chain",
+        "agent_core.harness.tiered_router.settings.opencode_provider_chain",
         "token-pool:token-pool/gpt-5.5,token-pool/gpt-5.4",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_fallback_enabled", True)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_fallback_enabled", True)
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_base_urls",
+        "agent_core.harness.tiered_router.settings.opencode_provider_base_urls",
         "token-pool.base_url=http://token-pool.test/v1",
     )
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_tokens",
+        "agent_core.harness.tiered_router.settings.opencode_provider_tokens",
         "token-pool.token=tp-secret",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_model_api_cache_seconds", 0)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_model_api_cache_seconds", 0)
 
     observed_headers = []
 
@@ -220,16 +241,16 @@ def test_model_availability_probe_sends_provider_token(monkeypatch):
 
 
 def test_available_provider_candidates_keeps_configured_models_on_probe_failure(monkeypatch):
-    from uta.opencode.tiered_router import available_provider_candidates
+    from agent_core.harness.tiered_router import available_provider_candidates
 
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_chain",
+        "agent_core.harness.tiered_router.settings.opencode_provider_chain",
         "openai:openai/gpt-5.5,openai/gpt-5.4",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_fallback_enabled", True)
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.openai_base_url", "http://models.test/v1")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_base_urls", "")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_tokens", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_fallback_enabled", True)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.openai_base_url", "http://models.test/v1")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_base_urls", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_tokens", "")
 
     def failing_get(url, timeout, headers=None):
         raise RuntimeError("model endpoint down")
@@ -241,17 +262,17 @@ def test_available_provider_candidates_keeps_configured_models_on_probe_failure(
 
 def test_model_availability_probe_uses_process_local_cache(monkeypatch):
     import httpx
-    from uta.opencode.tiered_router import available_provider_candidates
+    from agent_core.harness.tiered_router import available_provider_candidates
 
     monkeypatch.setattr(
-        "uta.opencode.tiered_router.settings.opencode_provider_chain",
+        "agent_core.harness.tiered_router.settings.opencode_provider_chain",
         "openai:openai/gpt-5.5,openai/gpt-5.4",
     )
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_fallback_enabled", True)
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.openai_base_url", "http://models.test/v1")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_base_urls", "")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_provider_tokens", "")
-    monkeypatch.setattr("uta.opencode.tiered_router.settings.opencode_model_api_cache_seconds", 300)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_fallback_enabled", True)
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.openai_base_url", "http://models.test/v1")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_base_urls", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_provider_tokens", "")
+    monkeypatch.setattr("agent_core.harness.tiered_router.settings.opencode_model_api_cache_seconds", 300)
 
     calls = []
 

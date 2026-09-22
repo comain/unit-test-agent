@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ record.request.app_name }} 单元测试覆盖率报告</title>
+  <style>
+    body { margin: 32px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; background: #f8fafc; }
+    main { max-width: 1120px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    code, pre { background: #eef2ff; border-radius: 4px; }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .actions { display: flex; align-items: center; gap: 12px; margin: 16px 0 20px; }
+    .fix-cta {
+      border: 0;
+      border-radius: 6px;
+      background: #dc2626;
+      color: #fff;
+      padding: 12px 22px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(220, 38, 38, 0.24);
+    }
+    .fix-cta:hover { background: #b91c1c; }
+    .guide-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }
+    .fix-form { display: grid; gap: 12px; margin: 16px 0; }
+    .fix-form textarea {
+      min-height: 96px;
+      resize: vertical;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font: inherit;
+      line-height: 1.5;
+    }
+    .fix-submit {
+      width: fit-content;
+      border: 0;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      padding: 10px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .fix-submit:disabled { background: #94a3b8; cursor: not-allowed; }
+    .fix-result { min-height: 24px; }
+    .session-list { margin: 12px 0 0; padding-left: 20px; line-height: 1.8; }
+    .session-top { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; }
+    .issue-list { margin: 6px 0 0 0; padding-left: 18px; line-height: 1.6; }
+    .issue-type { font-weight: 700; }
+    .progress-link {
+      display: inline-block;
+      margin-left: 10px;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      padding: 4px 10px;
+      font-weight: 700;
+    }
+    .progress-link:hover { background: #1d4ed8; color: #fff; text-decoration: none; }
+    .ok { color: #15803d; }
+    .bad { color: #b91c1c; }
+    .muted { color: #64748b; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>{{ record.request.app_name }} 单元测试覆盖率报告</h1>
+    {% if detail.canCreateFixSession %}
+      <div class="actions">
+        <button class="fix-cta" id="open-fix-session" type="button">一键修复</button>
+        <span class="muted">自动生成或补强单元测试，并重新验证 UTA test-enforcement。</span>
+      </div>
+    {% endif %}
+    <div class="meta">
+      <div>任务ID: <code>{{ record.task_id }}</code></div>
+      <div>状态: <strong class="{% if record.gate_override or (detail.enforcement and detail.enforcement.passed) %}ok{% else %}bad{% endif %}">{{ record.status.value }}</strong></div>
+      <div>分支: <code>{{ record.request.branch }}</code></div>
+      <div>提交: <code>{{ record.request.commit_id or 'N/A' }}</code></div>
+      <div>创建时间: {{ record.created_at | gmt8 }}</div>
+      <div>更新时间: {{ record.updated_at | gmt8 }}</div>
+    </div>
+    {% if record.gate_override %}
+      <div class="equivalence-override" style="border:1px solid #d97706;background:#fffbeb;padding:12px;margin:12px 0;border-radius:6px;">
+        <strong>等价变异豁免</strong>
+        <span class="muted">修复会话 <code>{{ record.gate_override.sessionId }}</code> 判定剩余变异体为等价变异；这些变异体并未被杀死，下一次 CI 仍按正常门禁执行。</span>
+        <div>原始变异分数: <code>{{ record.gate_override.rawMutationRate }}%</code> / 门禁 <code>{{ record.gate_override.mutationGate }}%</code>，豁免变异体 {{ record.gate_override.mutants }} 个</div>
+        {% for session in detail.fixSessions %}{% if session.equivalenceOverride %}
+          <table>
+            <thead><tr><th>变异体</th><th>结论</th><th>分歧区域</th><th>不可区分的理由</th><th>源码行</th></tr></thead>
+            <tbody>
+            {% for review in session.equivalenceOverride.reviews %}{% for verdict in review.verdicts %}
+              <tr>
+                <td><code>{{ verdict.key }}</code></td>
+                <td>{{ verdict.verdict }}</td>
+                <td>{{ verdict.divergence_region }}</td>
+                <td>{{ verdict.why_indistinguishable }}</td>
+                <td>{{ verdict.source_lines | join(', ') }}</td>
+              </tr>
+            {% endfor %}{% endfor %}
+            </tbody>
+          </table>
+        {% endif %}{% endfor %}
+      </div>
+    {% endif %}
+    {% if detail.fixSessions %}
+      <div class="session-top">
+        <h2>修复会话</h2>
+        <ul class="session-list" id="fix-session-list">
+          {% for session in detail.fixSessions %}
+            <li>
+              <code>{{ session.sessionId }}</code>
+              状态: <strong class="{% if session.status in ['green', 'passed_with_equivalent_mutants'] %}ok{% elif session.status in ['repair_failed','rerun_failed','rerun_unavailable'] or session.repoTaskStatus in ['FAILED','POISONED','BUDGET_EXCEEDED'] %}bad{% endif %}">{{ session.status }}</strong>
+              {% if session.repoTaskId %} repoTask={{ session.repoTaskId }}{% endif %}
+              {% if session.repoTaskStatus %} taskStatus={{ session.repoTaskStatus }}{% endif %}
+              retry={{ session.retryCount }}
+              {% if session.canonicalSessionUrl %}
+              <a class="progress-link" href="{{ session.canonicalSessionUrl }}">查看幂等会话</a>
+              {% elif session.canonicalTaskUrl %}
+              <a class="progress-link" href="{{ session.canonicalTaskUrl }}">查看幂等任务</a>
+              {% else %}
+              <a class="progress-link" href="fix-sessions/{{ session.sessionId }}/progress">查看修复进度</a>
+              {% endif %}
+              {% if session.canonicalSessionId %}
+              <span class="muted">已转到幂等会话 <code>{{ session.canonicalSessionId }}</code></span>
+              {% endif %}
+              {% if session.canonicalTaskId %}
+              <span class="muted">已转到幂等任务 <code>{{ session.canonicalTaskId }}</code></span>
+              {% endif %}
+              {% if session.repairIssues %}
+                <ul class="issue-list">
+                  {% for issue in session.repairIssues %}
+                    <li class="bad">
+                      <span class="issue-type">
+                        {% if issue.type == 'provider_rate_limit' %}Provider/model rate limit{% elif issue.type == 'generation_timeout' %}Generation timeout{% elif issue.type == 'planning_timeout' %}Planning timeout{% elif issue.type == 'no_test_changes' %}No test changes{% else %}{{ issue.type }}{% endif %}
+                      </span>
+                      {% if issue.stage %} <code>{{ issue.stage }}</code>{% endif %}
+                      {{ issue.message }}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% elif session.repoTaskError %}
+                <ul class="issue-list">
+                  <li class="bad">{{ session.repoTaskError }}</li>
+                </ul>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% elif detail.canCreateFixSession %}
+      <div class="session-top">
+        <h2>修复会话</h2>
+        <ul class="session-list" id="fix-session-list">
+          <li class="muted">暂无修复会话</li>
+        </ul>
+      </div>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>检查结论</h2>
+    <p>{{ detail.displaySummary or detail.summary or '暂无检查结果。' }}</p>
+    {% if detail.enforcement %}
+      <p>Enforcement 状态: <code>{{ detail.enforcement.status }}</code></p>
+      {% if detail.failureDiagnostics %}
+        <div class="muted">
+          <p class="bad">失败原因:</p>
+          <ul class="issue-list">
+            {% for diagnostic in detail.failureDiagnostics %}
+              <li>
+                <span class="issue-type">{{ diagnostic.title }}</span>: {{ diagnostic.message }}
+                {% if diagnostic.module %}<br/>模块: <code>{{ diagnostic.module }}</code>{% endif %}
+                {% if diagnostic.project %}<br/>Maven project: <code>{{ diagnostic.project }}</code>{% endif %}
+                {% if diagnostic.jacocoPath %}<br/>缺失文件: <code>{{ diagnostic.jacocoPath }}</code>{% endif %}
+                {% if diagnostic.filteredTargetClasses %}<br/>Maven 过滤后的目标类: <code>{{ diagnostic.filteredTargetClasses | join(', ') }}</code>{% endif %}
+                {% if diagnostic.targetTests %}<br/>本次选择的测试: <code>{{ diagnostic.targetTests | join(', ') }}</code>{% endif %}
+                {% if diagnostic.scopedModules and diagnostic.scopedModules | join('') %}<br/>Maven 本次验证模块: <code>{{ diagnostic.scopedModules | join(', ') }}</code>{% endif %}
+                {% if diagnostic.targetTestModules and diagnostic.targetTestModules | join('') %}<br/>所选测试所在模块: <code>{{ diagnostic.targetTestModules | join(', ') }}</code>{% endif %}
+                {% if diagnostic.testsSkipped %}<br/><span class="bad">Maven/Surefire 跳过了测试执行，JaCoCo 没有执行数据，因此无法生成覆盖率 XML。</span>{% endif %}
+                {% if diagnostic.targetMismatch %}<br/><span class="bad">目标类与测试选择不匹配，所选测试没有为目标模块生成 JaCoCo 覆盖率。</span>{% endif %}
+                {% if diagnostic.targetTestModuleMismatch %}<br/><span class="bad">所选测试在 Maven 本次验证范围之外，不能为目标模块生成 JaCoCo 覆盖率。</span>{% endif %}
+                {% if diagnostic.target %}<br/>目标: <code>{{ diagnostic.target }}</code>{% endif %}
+                {% if diagnostic.failingTestPaths %}<br/>失败测试: <code>{{ diagnostic.failingTestPaths | join(', ') }}</code>{% endif %}
+                {% if diagnostic.selectedTestPaths %}<br/>本次选择的测试: <code>{{ diagnostic.selectedTestPaths | join(', ') }}</code>{% endif %}
+                {% if diagnostic.candidateTestPaths %}<br/>候选测试: <code>{{ diagnostic.candidateTestPaths | join(', ') }}</code>{% endif %}
+                {% if diagnostic.errorExcerpt %}<br/>错误摘要: <code>{{ diagnostic.errorExcerpt }}</code>{% endif %}
+                {% if diagnostic.hint %}<br/>处理建议: {{ diagnostic.hint }}{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      <p>{% if detail.evidence.coverage and detail.evidence.coverage.scope == 'changed_lines' %}Diff 覆盖率（聚合）{% else %}覆盖率{% endif %}: <strong>{{ detail.evidence.coverage.formattedRate if detail.evidence.coverage else 'N/A' }}</strong>{% if detail.evidence.coverage %} <span class="muted">({{ detail.evidence.coverage.covered }}/{{ detail.evidence.coverage.total }}, {{ detail.evidence.coverage.modules }} 个{% if detail.evidence.coverage.source == 'python' %}目标{% else %}模块{% endif %})</span>{% endif %}</p>
+      {% if detail.evidence.coverageFailures %}
+        <div class="muted">
+          <p class="bad">未通过覆盖率门禁的目标:</p>
+          <ul>
+            {% for failure in detail.evidence.coverageFailures %}
+              <li><code>{{ failure.target }}</code>: {{ failure.formattedRate }}{% if failure.gate %} / gate {{ '%.2f'|format(failure.gate) }}%{% endif %} <span class="muted">({{ failure.covered }}/{{ failure.total }})</span>{% if failure.message %} - {{ failure.message }}{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      <p>{% if detail.evidence.mutation and (detail.evidence.mutation.source == 'diff' or detail.evidence.mutation.scope == 'changed_lines') %}Diff 变异得分{% if detail.evidence.mutation.source == 'python' %}（聚合）{% endif %}{% else %}变异得分{% endif %}: <strong>{{ detail.evidence.mutation.formattedRate if detail.evidence.mutation else 'N/A' }}</strong>{% if detail.evidence.mutation %} <span class="muted">({% if detail.evidence.mutation.source == 'python' %}{{ detail.evidence.mutation.killed }}/{{ detail.evidence.mutation.scored }} 计分变异{% if detail.evidence.mutation.noTests %}，{{ detail.evidence.mutation.noTests }} 个未匹配测试已排除{% endif %}{% else %}{{ detail.evidence.mutation.killed }}/{{ detail.evidence.mutation.generated }}{% endif %}{% if detail.evidence.mutation.source == 'python' and detail.evidence.mutation.sampled and detail.evidence.mutation.sampling %}；采样 {{ detail.evidence.mutation.sampling.sampledChangedLines }}/{{ detail.evidence.mutation.sampling.totalChangedLines }} 行{% endif %}{% if detail.evidence.mutation.source == 'python' and detail.evidence.mutationFailures and detail.evidence.mutationFailures.count %}；{{ detail.evidence.mutationFailures.count }} 个目标未通过变异门禁{% elif detail.evidence.mutation.source == 'python' and detail.evidence.mutationSkipped and detail.evidence.mutationSkipped.count %}，{{ detail.evidence.mutation.modules }} 个已执行目标；{{ detail.evidence.mutationSkipped.count }} 个目标因覆盖率未通过未执行变异{% else %}，{{ detail.evidence.mutation.modules }} 个{% if detail.evidence.mutation.source == 'python' %}目标{% else %}模块{% endif %}{% endif %})</span>{% endif %}</p>
+      {% if detail.evidence.mutation and detail.evidence.mutation.candidatePlan %}
+        {% if detail.evidence.mutationBudget %}<p class="muted">CI 报告级变异预算: 已分配 {{ detail.evidence.mutationBudget.allocatedCandidates }}/{{ detail.evidence.mutationBudget.configuredCandidates }} 个候选，实际选择/执行 {{ detail.evidence.mutationBudget.selectedCandidates }}/{{ detail.evidence.mutationBudget.runMutants }} 个；该上限由全部 Python 目标共享。变异门禁仅按报告聚合得分判定，单目标采样得分仅作诊断。</p>{% endif %}
+        <p class="muted">Python 变异候选计划: <code>{{ detail.evidence.mutation.candidatePlan.filterMechanism }}</code>；候选 {{ detail.evidence.mutation.candidatePlan.reportFullCandidates }} 个，实际执行 {{ detail.evidence.mutation.candidatePlan.activeCandidates }} 个，抑制 {{ detail.evidence.mutation.candidatePlan.suppressedOpportunities }} 个，按行合并 {{ detail.evidence.mutation.candidatePlan.omittedByOnePerLine }} 个{% if detail.evidence.mutation.candidatePlan.sampled %}；CI 上限裁剪已启用{% endif %}。</p>
+        <p class="muted">候选命中率: 预生成 {{ detail.evidence.mutation.candidatePlan.materializedCandidates }}/{{ detail.evidence.mutation.candidatePlan.preGenerationSelectedOpportunities }}（{{ '%.2f'|format(detail.evidence.mutation.candidatePlan.preGenerationMaterializationRatio * 100) }}%）{% if detail.evidence.mutation.candidatePlan.preGenerationMaterializationWarning %}，需继续收敛{% endif %}；执行单元 {{ detail.evidence.mutation.candidatePlan.materializedCandidates }}/{{ detail.evidence.mutation.candidatePlan.selectedOpportunities }}（{{ '%.2f'|format(detail.evidence.mutation.candidatePlan.materializedCandidateRatio * 100) }}%）{% if detail.evidence.mutation.candidatePlan.materializedCandidateWarning %}，低于 90%{% endif %}。</p>
+        <p class="muted">候选漏斗: changed {{ detail.evidence.mutation.candidatePlan.changedLines }} 行 -> covered {{ detail.evidence.mutation.candidatePlan.coveredChangedLines }} 行 -> eligible {{ detail.evidence.mutation.candidatePlan.eligibleOpportunities }} 个 -> selected/run {{ detail.evidence.mutation.candidatePlan.activeCandidates }}/{{ detail.evidence.mutation.candidatePlan.runMutants }} 个 -> scored {{ detail.evidence.mutation.candidatePlan.scoredMutants }} 个 -> killed/survived {{ detail.evidence.mutation.candidatePlan.killed }}/{{ detail.evidence.mutation.candidatePlan.survived }}{% if detail.evidence.mutation.candidatePlan.noTests %}；未匹配测试 {{ detail.evidence.mutation.candidatePlan.noTests }}{% endif %}{% if detail.evidence.mutation.candidatePlan.timeout %}；超时 {{ detail.evidence.mutation.candidatePlan.timeout }}{% endif %}{% if detail.evidence.mutation.candidatePlan.suspicious %}；可疑 {{ detail.evidence.mutation.candidatePlan.suspicious }}{% endif %}。</p>
+        {% if detail.evidence.mutation.candidatePlan.comparable is sameas false %}
+          <p class="muted">候选计划不可与原报告直接比较：{{ detail.evidence.mutation.candidatePlan.changedFingerprints|join(', ') }} 已变化。</p>
+        {% endif %}
+      {% endif %}
+      {% if detail.evidence.mutationBlocked %}
+        <div class="muted">
+          <p class="bad">{{ detail.evidence.mutationBlocked.title }}</p>
+          <p>{{ detail.evidence.mutationBlocked.message }}</p>
+          {% if detail.evidence.mutationBlocked.project %}<p>Maven project: <code>{{ detail.evidence.mutationBlocked.project }}</code></p>{% endif %}
+          {% if detail.evidence.mutationBlocked.failingTests %}
+            <p>失败测试:</p>
+            <ul>
+              {% for failingTest in detail.evidence.mutationBlocked.failingTests %}
+                <li><code>{{ failingTest }}</code></li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if detail.evidence.mutationBlocked.hint %}<p>处理建议: {{ detail.evidence.mutationBlocked.hint }}</p>{% endif %}
+        </div>
+      {% endif %}
+      {% if detail.evidence.mutationFailures and detail.evidence.mutationFailures.count %}
+        <div class="muted">
+          <p class="bad">未通过变异门禁的目标:</p>
+          <ul>
+            {% for failure in detail.evidence.mutationFailures.targets %}
+              <li><code>{{ failure.target }}</code>: {{ failure.formattedRate }}{% if failure.gate %} / gate {{ '%.2f'|format(failure.gate) }}%{% endif %} <span class="muted">({{ failure.killed }}/{{ failure.scored if failure.scored is defined else failure.generated }} 计分变异{% if failure.noTests %}，{{ failure.noTests }} 个未匹配测试已排除{% endif %}{% if failure.sampled and failure.sampling %}，采样 {{ failure.sampling.sampledChangedLines }}/{{ failure.sampling.totalChangedLines }} 行{% endif %}{% if failure.timeout %}，{{ failure.timeout }} 个超时{% endif %}{% if failure.suspicious %}，{{ failure.suspicious }} 个可疑{% endif %})</span>{% if failure.message %} - {{ failure.message }}{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if detail.evidence.excludedFailingTestClasses %}
+        <div class="muted">
+          <p>已排除的失败测试（与本次变更无关，覆盖率与变异门禁均不计入）:
+            <strong>{{ detail.evidence.excludedFailingTestClasses|length }}</strong> 个测试类</p>
+          <ul>
+            {% for cls in detail.evidence.excludedFailingTestClasses[:20] %}
+              <li><code>{{ cls }}</code></li>
+            {% endfor %}
+          </ul>
+          {% if detail.evidence.retainedFailingTestClasses %}
+            <p class="bad">与本次变更相关、仍计入门禁的失败测试:
+              {% for cls in detail.evidence.retainedFailingTestClasses %}
+                <code>{{ cls }}</code>{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </p>
+          {% endif %}
+        </div>
+      {% elif detail.evidence.exclusionReason and detail.evidence.exclusionReason not in ('no-failures', '') %}
+        <div class="muted">
+          <p>未排除任何失败测试: <code>{{ detail.evidence.exclusionReason }}</code></p>
+        </div>
+      {% endif %}
+      {% if detail.evidence.hangingTestClasses or detail.evidence.quarantinedTestClasses or detail.evidence.preQuarantinedTestClasses or detail.evidence.retainedHangingTestClasses %}
+        <div class="muted">
+          <p>未结束测试隔离（静默 {{ detail.evidence.stallSeconds }} 秒，重试 {{ detail.evidence.stallRetries }} 次）:</p>
+          {% if detail.evidence.hangingTestClasses %}<p>本次检测: {% for cls in detail.evidence.hangingTestClasses %}<code>{{ cls }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+          {% if detail.evidence.quarantinedTestClasses %}<p>本次隔离: {% for cls in detail.evidence.quarantinedTestClasses %}<code>{{ cls }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+          {% if detail.evidence.preQuarantinedTestClasses %}<p>启动前隔离: {% for cls in detail.evidence.preQuarantinedTestClasses %}<code>{{ cls }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+          {% if detail.evidence.retainedHangingTestClasses %}<p class="bad">与本次变更相关、未隔离: {% for cls in detail.evidence.retainedHangingTestClasses %}<code>{{ cls }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+          {% if detail.evidence.stallReason %}<p>停止原因: <code>{{ detail.evidence.stallReason }}</code></p>{% endif %}
+        </div>
+      {% endif %}
+      {% if detail.evidence.skippedTargets and detail.evidence.skippedTargets.count %}
+        <div class="muted">
+          <p>⚠️ 警告: <strong>{{ detail.evidence.skippedTargets.count }}</strong> 个文件未被验证，已跳过覆盖率与变异检查（不影响门禁结果）。</p>
+          <ul>
+            {% for skipped in detail.evidence.skippedTargets.targets %}
+              <li>
+                <code>{{ skipped.target }}</code> — {{ skipped.reasonLabel }}
+                {% if skipped.message %}<br/><span class="muted">{{ skipped.message }}</span>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if detail.evidence.testQuality and detail.evidence.testQuality.warningCount %}
+        <div class="muted">
+          <p>Test quality signals: <strong>{{ detail.evidence.testQuality.warningCount }}</strong> advisory warning(s). Coverage and mutation gates remain authoritative.</p>
+          {% if detail.evidence.testQuality.topRuleIds %}
+            <p>Top rules:
+              {% for rule in detail.evidence.testQuality.topRuleIds %}
+                <code>{{ rule.ruleId }}</code> × {{ rule.count }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </p>
+          {% endif %}
+          <ul>
+            {% for warning in detail.evidence.testQuality.warnings %}
+              <li>
+                <code>{{ warning.filePath }}</code>{% if warning.line %}:{{ warning.line }}{% endif %}
+                — <code>{{ warning.ruleId }}</code>: {{ warning.message }}
+                {% if warning.evidence %}<br/><span class="muted">{{ warning.evidence }}</span>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if detail.evidence.dependencyWarnings %}
+        <div class="muted">
+          <p>依赖 POM 缺失警告（此警告不单独决定结果；仍以 Maven 执行及覆盖率、变异门禁的实际结果为准）:</p>
+          <ul>
+            {% for warning in detail.evidence.dependencyWarnings %}
+              <li><code>{{ warning }}</code></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if not detail.evidence.mutation and detail.evidence.pitMutation %}
+        <p class="muted">PIT 全量变异统计: <strong>{{ detail.evidence.pitMutation.formattedRate }}</strong> ({{ detail.evidence.pitMutation.killed }}/{{ detail.evidence.pitMutation.generated }}, {{ detail.evidence.pitMutation.modules }} 个模块)。该统计仅用于诊断，未作为 diff 变异门禁结果。</p>
+      {% endif %}
+      {% if detail.testEnforcementRequirements %}
+        <div>
+          <p class="bad">未获得有效 test-enforcement 证据。请确认项目已接入满足版本要求的 UTA test-enforcement。</p>
+          <p class="bad">当前项目需要先让 Maven effective-pom 解析出 <code>{{ detail.testEnforcementRequirements.requiredPlugin }}</code>，再重新触发单元测试检查；该类问题不能通过一键生成测试修复。</p>
+          {% if detail.testEnforcementRequirements.detected %}
+            <p class="bad">当前版本不满足 test-enforcement 要求:
+              <code>{{ detail.testEnforcementRequirements.detected.artifactId or 'unknown' }} {{ detail.testEnforcementRequirements.detected.version or 'unknown' }}</code>
+              {% if detail.testEnforcementRequirements.detected.requiredVersion %}，要求版本: &gt;= {{ detail.testEnforcementRequirements.detected.requiredVersion }}{% endif %}
+            </p>
+            {% if detail.testEnforcementRequirements.detected.reason %}
+              <p class="muted">识别原因: {{ detail.testEnforcementRequirements.detected.reason }}</p>
+            {% endif %}
+          {% endif %}
+          <ol class="guide-list">
+            {% for path in detail.testEnforcementRequirements.inheritancePaths %}
+              <li>
+                <strong>{{ path.title }}</strong>: {{ path.instruction }}
+                <pre>{{ path.snippet }}</pre>
+              </li>
+            {% endfor %}
+            <li>
+              <strong>{{ detail.testEnforcementRequirements.fallback.title }}</strong>: {{ detail.testEnforcementRequirements.fallback.instruction }}
+              <pre>{{ detail.testEnforcementRequirements.fallback.snippet }}</pre>
+            </li>
+          </ol>
+          {% if detail.testEnforcementRequirements.usageGuide %}
+            <p><a href="{{ detail.testEnforcementRequirements.usageGuide }}" target="_blank" rel="noopener">查看 POM 接入说明</a></p>
+          {% endif %}
+        </div>
+      {% endif %}
+      <p>命令: <code>{{ detail.enforcement.command | join(' ') }}</code></p>
+      <p>返回码: <code>{{ detail.enforcement.returncode if detail.enforcement.returncode is not none else 'N/A' }}</code></p>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>本地启用 test-enforcement</h2>
+    {% if record.request.language == 'python' %}
+    <p class="muted">为了在提交前发现同类问题，请在本地开发环境启用 dev-skills 的 Python test-enforcement 标准。</p>
+    <ol class="guide-list">
+      <li>按 <a href="https://git.example.com/example-org/plugins/blob/init/plugins/dev-skills/README.zh-CN.md" target="_blank" rel="noopener">dev workflow skills 使用说明</a> 安装并启用 dev-skills。</li>
+      <li>配置 UTA 轻量 Python enforcement 工具：设置 <code>UTA_PYTHON_ENFORCE_SCRIPT=/path/to/unit-test-agent/tools/python-enforcement/uta_python_test_enforce.py</code>，只需 sparse-checkout 该轻量目录；完整 UTA CLI 仍可作为 fallback。</li>
+      <li>开发分支提交前运行本地 UTA Python test-enforcement，确认 diff 覆盖率、mutmut 变异测试、batch/operator 过滤证据通过，并输出 <code>UTA_PYTHON_ENFORCEMENT_EVIDENCE</code>。</li>
+      <li>如果本地结果与 RDC 不一致，优先使用本报告中的 Python enforcement 命令复现；重点核对轻量工具版本、Python 版本、依赖安装、pytest、coverage.py、mutmut 和 candidatePlan 输出。</li>
+    </ol>
+    {% else %}
+    <p class="muted">为了在提交前发现同类问题，请在本地开发环境启用 dev-skills 的 test-enforcement 标准。</p>
+    <ol class="guide-list">
+      <li>按 <a href="https://git.example.com/example-org/plugins/blob/init/plugins/dev-skills/README.zh-CN.md" target="_blank" rel="noopener">dev workflow skills 使用说明</a> 安装并启用 dev-skills。</li>
+      <li>开发分支提交前，通过 dev-skills 的 <code>scripts/uta_java_test_enforce.py -- mvn ... verify</code> 运行本地门禁，确认 diff 覆盖率和 PIT 变异测试通过。</li>
+      <li>该入口自动获取固定版本的 UTA Maven 兼容工具，与 CI 共用运行时作用域和完成证据校验；无需修改项目 POM。复现时保留本报告的测试选择、门槛和模块参数，不要复制服务器专用的扩展路径或证据路径。</li>
+    </ol>
+    {% endif %}
+  </section>
+  {% if detail.enforcement %}
+  <section class="panel">
+    <h2>标准输出</h2>
+    <pre>{{ detail.enforcement.stdout }}</pre>
+    <h2>错误输出</h2>
+    <pre>{{ detail.enforcement.stderr }}</pre>
+  </section>
+  {% endif %}
+  <section class="panel">
+    <h2>回调状态</h2>
+    <p>RDC callback: <code>{{ detail.callback.succeeded }}</code></p>
+    {% if detail.callback.error %}
+      <p class="bad">{{ detail.callback.error }}</p>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>缺失上下文</h2>
+    <ul>
+      {% for reason in detail.context.missingReasons %}
+        <li><code>{{ reason }}</code></li>
+      {% else %}
+        <li class="muted">none</li>
+      {% endfor %}
+    </ul>
+    <h2>上下文来源</h2>
+    <ul>
+      {% for source in detail.context.sources %}
+        <li><code>{{ source.name }}</code> {{ 'available' if source.available else 'missing' }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% if detail.canCreateFixSession %}
+  <section class="panel" id="fix-session-panel"{% if not detail.fixSessions %} hidden{% endif %}>
+    <h2>一键修复</h2>
+    <p class="muted">补充本次失败的业务上下文后，UTA 会创建高优先级修复任务，修复完成后重新验证 UTA test-enforcement。</p>
+    <form class="fix-form" id="fix-session-form">
+      <label for="fix-user-context">补充上下文（可选）</label>
+      <textarea id="fix-user-context" name="userContext" placeholder="例如：优先修复编译失败的测试，保持只改测试代码；本次 JIRA 主要是 QGP 保质期选择。"></textarea>
+      <button class="fix-submit" type="submit">创建修复任务</button>
+      <div class="fix-result muted" id="fix-session-result" role="status"></div>
+    </form>
+  </section>
+  <script>
+    (function () {
+      var openButton = document.getElementById("open-fix-session");
+      var panel = document.getElementById("fix-session-panel");
+      var form = document.getElementById("fix-session-form");
+      var textarea = document.getElementById("fix-user-context");
+      var result = document.getElementById("fix-session-result");
+      var list = document.getElementById("fix-session-list");
+      if (!openButton || !panel || !form) {
+        return;
+      }
+      openButton.addEventListener("click", function () {
+        panel.hidden = false;
+        if (textarea) {
+          textarea.focus();
+        }
+      });
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        var submit = form.querySelector("button[type='submit']");
+        if (submit) {
+          submit.disabled = true;
+        }
+        result.className = "fix-result muted";
+        result.textContent = "正在创建修复任务...";
+        fetch("fix-sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userContext: textarea ? textarea.value : "" })
+        }).then(function (response) {
+          return response.json().then(function (body) {
+            if (!response.ok) {
+              throw new Error(body.detail || "创建修复任务失败");
+            }
+            return body;
+          });
+        }).then(function (body) {
+          var session = body.session || {};
+          result.className = "fix-result ok";
+          result.textContent = "修复任务已创建，状态：" + (session.status || "created") + (session.repoTaskId ? "，repoTask=" + session.repoTaskId : "");
+          if (list && session.sessionId) {
+            var progressHref = "fix-sessions/" + encodeURIComponent(session.sessionId) + "/progress";
+            list.innerHTML = "<li><code>" + session.sessionId + "</code> " + (session.status || "created") + (session.repoTaskId ? " repoTask=" + session.repoTaskId : "") + " retry=" + (session.retryCount || 0) + " <a class=\"progress-link\" href=\"" + progressHref + "\">查看修复进度</a></li>";
+          }
+        }).catch(function (error) {
+          result.className = "fix-result bad";
+          result.textContent = error.message;
+          if (submit) {
+            submit.disabled = false;
+          }
+        });
+      });
+    }());
+  </script>
+  {% endif %}
+</main>
+</body>
+</html>

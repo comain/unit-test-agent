@@ -93,25 +93,6 @@ class TestBudgetExceededAbort:
         assert task is not None
         assert int(task["id"]) == tid
 
-    def test_llm_guard_raises_when_hard_cap_breached(self, tmp_path):
-        from uta.graph.nodes import TaskBudgetExceeded, _llm_guard_before
-        mgr = _make_manager(tmp_path)
-        repo = tmp_path / "repo3"
-        repo.mkdir()
-        tid = mgr.create_task(repo_path=str(repo), hard_cap_usd=0.01)
-        mgr.start_task(tid)
-        # Simulate $0.50 already spent
-        mgr.db.update_repo_task(tid, provider_cost_usd=0.50)
-
-        state = {
-            "task_id": tid,
-            "task_db_path": str(mgr.db_path),
-            "repo_path": str(repo),
-        }
-        with pytest.raises(TaskBudgetExceeded, match="Hard cap exceeded"):
-            _llm_guard_before(state, batch=[], phase="generate")
-
-
 @pytest.mark.e2e
 class TestGlobalBatchCap:
     def test_total_cost_sums_all_tasks(self, tmp_path):
@@ -136,7 +117,7 @@ class TestGlobalBatchCap:
         db = TaskDB(str(tmp_path / "tasks.db"))
         db.init()
 
-        with patch("uta.config.settings") as mock_settings:
+        with patch("uta.shared.config.settings") as mock_settings:
             mock_settings.batch_cap_usd = 3.0
             with patch.object(db, "total_provider_cost_usd", return_value=5.0):
                 total = db.total_provider_cost_usd()

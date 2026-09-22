@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from uta.engine.context import ContextProvider, ContextQuery
+from uta.testgen.context import ContextProvider, ContextQuery
 from uta.language.java.context import JavaContextProvider
 from uta.language.python.context import PythonContextProvider
-from uta.engine.context import make_context_provider
-from uta.engine.languages import RawTargetSelection, default_registry
+from uta.testgen.context import make_context_provider
+from uta.shared.languages import RawTargetSelection, default_registry
 from uta.language.java.parse.models import CodeGraph, GraphEdge, GraphNode
-from uta.tasks.targets import TargetIdentity
+from uta.shared.targets import TargetIdentity
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "python_projects"

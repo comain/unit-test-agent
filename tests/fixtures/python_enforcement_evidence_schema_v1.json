@@ -1,0 +1,25 @@
+{
+  "requiredTopLevelFields": [
+    "schemaVersion",
+    "language",
+    "backend",
+    "headCommit",
+    "coverage",
+    "mutation",
+    "setup",
+    "enforcementCoreVersion"
+  ],
+  "requiredMutationFields": [
+    "candidatePlan"
+  ],
+  "requiredCandidatePlanFields": [
+    "activeSelected",
+    "eligibleMutationOpportunities",
+    "exactToolCandidateKeys",
+    "reportFullSelected",
+    "samplingLayer"
+  ],
+  "localEvidenceRules": {
+    "samplingLayerEnabled": false
+  }
+}

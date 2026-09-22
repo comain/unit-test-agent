@@ -1,0 +1,82 @@
+A generated Python test file passes coverage but leaves surviving mutants.
+Strengthen assertions and edge-case checks without changing production code.
+
+Stable rules:
+- Edit only the active verification test file: `{{ generated_test_path or test_file_path }}`.
+- Do not create a new `tests/uta_generated/` file unless that is the active verification test file.
+- Do not edit production Python files.
+- Do not write or modify verifier configuration or mutation runtime artifacts such as `pyproject.toml`, `setup.cfg`, `tox.ini`, `pytest.ini`, `mutants/`, `.mutmut-cache/`, or `.uta_cache/`; UTA owns verifier setup.
+- Preserve deterministic execution. If the file has UTA ownership metadata, keep it.
+- Do not assert implementation details unless behavior cannot otherwise kill the mutant.
+- Do not inspect Python implementation internals such as `__code__`, `co_consts`, bytecode, source text, or mutmut trampoline/wrapper constants; mutmut may replace functions during stats collection, so these assertions are not stable mutation tests.
+- Mock side effects; never rely on real network, database, scheduler, or clock state.
+- For async/background loops, never directly await a perpetual loop or a task that may run forever. Bound it with `asyncio.wait_for`, make fake sleeps deterministic without assertions that production code can swallow, and cancel/reap created tasks in `finally`.
+- Import the target through its real dotted module path, not by file loader. For this target, use `{{ canonical_module }}` exactly.
+- Do not load the target source with `importlib.util.spec_from_file_location`, `SourceFileLoader`, `runpy.run_path`, `exec_module`, or a synthetic alias module such as `_uta_*`; do not create a synthetic alias package because mutmut must see tests execute the real mutated module.
+- Do not invent alternate import aliases. If the canonical module starts with `src.`, keep that prefix; if it does not, do not add it.
+- If imports are stubbed through `sys.modules`, use dependency module names under the same package prefix as the canonical module. Example: for `src.app_shidiao`, stub `src.web_common`, not `web_common`.
+- Avoid brittle assertions on exact import-time logger names or module `__name__` values. During mutmut, wrappers may preserve behavior while changing import metadata; assert behavior and side effects instead.
+- Do not run direct `mutmut`, `mutmut results`, `mutmut show`, broad pytest, custom mutation commands, or manually inspect/create `mutants/`.
+- Do not run the UTA verification command yourself. UTA will run the authoritative verifier after your edit and will rebuild mutation context for the next turn if needed.
+- After editing, run the active test file directly with `python -m pytest {{ generated_test_path or test_file_path }} -q` and fix any failures in that same file before stopping.
+- You may also run small deterministic syntax/import checks such as `python -m py_compile` for the active test file. Do not run mutation verification, coverage, broad pytest, UTA verification, or project test scripts.
+- Make one coherent multi-mutant edit to the active test file, then stop and report the change. Do not spend extra turns debugging the mutmut runtime or unrelated repository tests.
+- When choosing expected values, prefer documented behavior (spec context, docstrings/javadoc, existing tests, caller contracts) over re-deriving them from the implementation.
+- Treat surviving mutants as missing behavior checks. Add assertions for the observable behavior that should change if the mutant is active.
+- Do not mirror production implementation logic when computing expected values. Use explicit examples, boundary values, and externally visible effects.
+- Add boundary and failure-mode cases before adding more happy-path assertions when survivors involve conditionals, thresholds, retries, or error branches.
+- Weak assertions such as non-null/truthiness/length-only checks or mock call counts are not enough unless paired with behavior-specific assertions.
+
+{# CACHE_BOUNDARY #}
+{%- if spec_context %}
+
+### SUPPLIED BEHAVIOR CONTEXT
+The following externally supplied behavior rules are authoritative:
+
+{{ spec_context }}
+{%- endif %}
+### TARGET
+- Target: `{{ display_name }}`
+- Target ID: `{{ target_id }}`
+- Source: `{{ source_path }}`
+- Canonical module: `{{ canonical_module }}`
+{% if symbol %}- Symbol: `{{ symbol }}`
+{% endif %}
+- Active test path: `{{ generated_test_path or test_file_path }}`
+- Mutation gate: `{{ mutation_gate or ci_diff_mutation_gate }}`
+
+### CONTEXT
+- Target context: `{{ context_abs or target_context_abs }}`
+- Context JSON: `{{ context_json_abs }}`
+- Structured query: `{{ index_query_command }}`
+{% if mutation_repair_context_abs %}
+- Mutation repair context: `{{ mutation_repair_context_abs }}`
+{% endif %}
+{% if mutation_repair_roi_guided_full %}
+- Mutation strategy: full ROI-ranked survivor map. Use the context artifact's ROI order to choose enough high-value groups to plausibly reach the mutation gate before stopping.
+{% endif %}
+{% if mutation_repair_split and mutation_repair_group_abs %}
+- Selected mutation groups: `{{ mutation_repair_group }}`
+- Selected group contexts:
+```
+{{ mutation_repair_group_abs }}
+```
+{% endif %}
+### SURVIVING MUTANTS
+```
+{{ mutation_diagnostics or mutation_report }}
+```
+
+### REPAIR TASK
+Read the mutation repair context artifact. Do not explore mutmut output manually; use the provided context only.
+If the context lists timed-out mutation candidates, first look for generated tests that can hang under mutation, especially unbounded async loops, sleeps, background tasks, clocks, or wait-for-reply paths. Fix the test to prove behavior with bounded deterministic awaits before adding more assertions.
+If every remaining survivor appears observationally equivalent under the public behavior (for example, replacing one falsey sentinel with another that is only consumed by truth tests), make no test edit and stop promptly with that reason. UTA will run deterministic verification and route unchanged survivors to its dedicated equivalent-mutant review; do not invent implementation-introspection assertions.
+{% if mutation_repair_roi_guided_full %}
+Use the full ROI-ranked survivor map. Choose enough high-ROI groups to plausibly reach the mutation gate in this one coherent edit, then stop so UTA can run the authoritative verifier. Do not crawl low-ROI groups unless the high-ROI groups are exhausted or obviously equivalent.
+{% endif %}
+{% if mutation_repair_split and mutation_repair_group_abs %}
+Update the same active verification test file to kill the selected mutation groups only: `{{ mutation_repair_group }}`.
+Make one coherent edit that covers these selected groups together. Do not try to fix the full survivor set in this round.
+{% else %}
+Update the same active verification test file to kill the listed surviving mutant groups with behavior-focused assertions.
+{% endif %}

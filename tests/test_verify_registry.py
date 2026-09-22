@@ -1,8 +1,10 @@
-from uta.engine.verification import default_verification_registry
+from uta_enforce_core.registry import EnforcementRegistry
+from uta.enforcement.bindings import JavaEnforcementBinding, UtaPythonEnforcementProxy
 
 
-def test_default_verification_registry_exposes_java_and_python():
-    registry = default_verification_registry()
+def test_enforcement_registry_exposes_java_and_python():
+    registry = EnforcementRegistry([JavaEnforcementBinding(), UtaPythonEnforcementProxy()])
 
-    assert registry.runner_for("java").language == "java"
-    assert registry.runner_for("python").language == "python"
+    assert registry.get("java").language == "java"
+    assert registry.get("python").language == "python"
+    assert registry.languages == ("java", "python")

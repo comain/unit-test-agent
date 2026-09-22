@@ -1,5 +1,5 @@
 import tree_sitter_java
-from tree_sitter import Language, Parser, Node
+from tree_sitter import Language, Node, Parser, Query
 from typing import Any, Dict, List, Optional
 from uta.language.java.parse.models import (
     ParsedSymbol, ExtractedCall, ExtractedHeritage,
@@ -61,6 +61,14 @@ def _text(content: bytes, node: Node) -> str:
     return content[node.start_byte:node.end_byte].decode('utf-8', errors='replace')
 
 
+def _compile_query(language: Language, source: str):
+    """Compile a query across tree-sitter's legacy and current Python APIs."""
+    legacy_query = getattr(language, "query", None)
+    if callable(legacy_query):
+        return legacy_query(source)
+    return Query(language, source)
+
+
 def _captures_by_name(query, root_node: Node) -> Dict[str, List[Node]]:
     """Return query captures across tree-sitter Python API variants."""
     if hasattr(query, "captures"):
@@ -93,7 +101,7 @@ def _captures_by_name(query, root_node: Node) -> Dict[str, List[Node]]:
 class JavaParser:
     def __init__(self):
         self.parser = Parser(JAVA_LANGUAGE)
-        self.query = JAVA_LANGUAGE.query(JAVA_QUERIES)
+        self.query = _compile_query(JAVA_LANGUAGE, JAVA_QUERIES)
 
     def parse_file(self, file_path: str) -> ParseResult:
         with open(file_path, "rb") as f:
@@ -124,7 +132,7 @@ class JavaParser:
         )
 
     def _extract_package(self, root_node: Node, content: bytes) -> str:
-        query = JAVA_LANGUAGE.query("(package_declaration (scoped_identifier) @package)")
+        query = _compile_query(JAVA_LANGUAGE, "(package_declaration (scoped_identifier) @package)")
         captures = _captures_by_name(query, root_node)
         if "package" in captures:
             node = captures["package"][0]
@@ -132,7 +140,7 @@ class JavaParser:
         return ""
 
     def _extract_all_imports(self, root_node: Node, content: bytes, imports: List[str]):
-        query = JAVA_LANGUAGE.query("(import_declaration) @import")
+        query = _compile_query(JAVA_LANGUAGE, "(import_declaration) @import")
         captures = _captures_by_name(query, root_node)
         if "import" in captures:
             for node in captures["import"]:

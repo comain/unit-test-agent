@@ -2,13 +2,15 @@
 
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
+import signal
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uta.opencode.process import OpenCodeProcess, TurnResult, _build_env
+from agent_core.harness.process import OpenCodeProcess, _build_env
 
 
 def _jsonl(*events) -> bytes:
@@ -44,6 +46,7 @@ def _error(message, status_code=None, session_id="ses_abc"):
 def _make_proc(stdout_bytes: bytes, returncode: int = 0):
     proc = MagicMock(spec=subprocess.Popen)
     proc.stdout = io.BytesIO(stdout_bytes)
+    proc.stderr = io.BytesIO(b"")
     proc.returncode = returncode
     proc.wait = MagicMock(return_value=returncode)
     proc.kill = MagicMock()
@@ -58,7 +61,7 @@ def oc_process():
 # --- _build_cmd ---
 
 def test_build_cmd_defaults(oc_process):
-    with patch("uta.opencode.process.OpenCodeProcess._build_cmd", wraps=oc_process._build_cmd):
+    with patch("agent_core.harness.process.OpenCodeProcess._build_cmd", wraps=oc_process._build_cmd):
         cmd = oc_process._build_cmd("hello", session_id=None, model_id=None)
     assert "opencode" in cmd[0] or cmd[0].endswith("opencode")
     assert "run" in cmd
@@ -71,7 +74,7 @@ def test_build_cmd_defaults(oc_process):
 
 
 def test_build_cmd_can_disable_pure_mode(monkeypatch, oc_process):
-    monkeypatch.setattr("uta.opencode.process.settings.opencode_pure", False)
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_pure", False)
     cmd = oc_process._build_cmd("hello", session_id=None, model_id=None)
     assert "--pure" not in cmd
 
@@ -91,7 +94,7 @@ def test_build_cmd_with_variant(oc_process):
 
 
 def test_build_cmd_uses_configured_variant(monkeypatch, oc_process):
-    monkeypatch.setattr("uta.opencode.process.settings.opencode_variant", "low")
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_variant", "low")
     cmd = oc_process._build_cmd("hi", session_id=None, model_id="openai/gpt-5.5")
     assert "--variant" in cmd
     idx = cmd.index("--variant")
@@ -106,8 +109,23 @@ def test_build_cmd_with_session(oc_process):
     assert "--continue" in cmd
 
 
+def test_build_cmd_materializes_large_prompt_file(oc_process, tmp_path):
+    message = "x" * 70000
+
+    cmd = oc_process._build_cmd(message, session_id=None, model_id=None, repo_path=str(tmp_path))
+
+    assert message not in cmd
+    assert "--file" in cmd
+    short_message_index = cmd.index("--file") - 1
+    assert cmd[short_message_index].startswith("Read and follow the attached prompt file exactly:")
+    prompt_path = Path(cmd[cmd.index("--file") + 1])
+    assert prompt_path.is_file()
+    assert prompt_path.read_text(encoding="utf-8") == message
+    assert len(cmd[short_message_index]) < len(message)
+
+
 def test_build_cmd_attach_url(oc_process):
-    with patch("uta.opencode.process.settings") as mock_settings:
+    with patch("agent_core.harness.process.settings") as mock_settings:
         mock_settings.opencode_attach_url = "http://localhost:4096"
         mock_settings.opencode_spawn_cmd = None
         mock_settings.opencode_bin = None
@@ -119,7 +137,7 @@ def test_build_cmd_attach_url(oc_process):
 
 
 def test_build_cmd_custom_spawn_cmd(oc_process):
-    with patch("uta.opencode.process.settings") as mock_settings:
+    with patch("agent_core.harness.process.settings") as mock_settings:
         mock_settings.opencode_spawn_cmd = '["bun", "run", "src/index.ts", "run"]'
         mock_settings.opencode_attach_url = None
         mock_settings.opencode_bin = None
@@ -146,13 +164,35 @@ def test_run_turn_uses_repo_dir_for_command_and_process_cwd(oc_process, tmp_path
         captured["kwargs"] = kwargs
         return proc
 
-    with patch("uta.opencode.process.subprocess.Popen", side_effect=fake_popen):
+    with patch("agent_core.harness.process.subprocess.Popen", side_effect=fake_popen):
         result = oc_process.run_turn("hello", repo_path=repo_path, timeout=10)
 
     assert result.type == "completed"
     assert "--dir" not in captured["cmd"]
     assert captured["kwargs"]["cwd"] == repo_path
     assert captured["kwargs"]["env"]["PWD"] == repo_path
+    assert captured["kwargs"]["stdin"] is subprocess.DEVNULL
+
+
+def test_run_turn_starts_opencode_with_child_cleanup_hook(oc_process, tmp_path):
+    captured = {}
+    proc = MagicMock(spec=subprocess.Popen)
+    proc.stdout = io.BytesIO(_jsonl(_step_start(), _text("ok"), _step_finish()))
+    proc.stderr = io.BytesIO(b"")
+    proc.returncode = 0
+    proc.wait = MagicMock(return_value=0)
+    proc.kill = MagicMock()
+
+    def fake_popen(cmd, **kwargs):
+        captured["kwargs"] = kwargs
+        return proc
+
+    with patch("agent_core.harness.process.subprocess.Popen", side_effect=fake_popen):
+        result = oc_process.run_turn("hello", repo_path=str(tmp_path), timeout=10)
+
+    assert result.type == "completed"
+    if os.name != "nt":
+        assert callable(captured["kwargs"]["preexec_fn"])
 
 
 def test_build_env_prepends_service_python_bin(monkeypatch, tmp_path):
@@ -160,7 +200,7 @@ def test_build_env_prepends_service_python_bin(monkeypatch, tmp_path):
     service_bin.mkdir(parents=True)
     service_python = service_bin / "python"
     service_python.write_text("", encoding="utf-8")
-    monkeypatch.setattr("uta.opencode.process.sys.executable", str(service_python))
+    monkeypatch.setattr("agent_core.harness.process.sys.executable", str(service_python))
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
 
     env = _build_env(str(tmp_path))
@@ -191,6 +231,8 @@ def test_read_stream_ignores_non_iterable_mock_streams(oc_process):
     result = oc_process._read_stream(proc, timeout=1, on_update=None)
 
     assert result.type == "stalled"
+    assert result.fallback_eligible is True
+    assert result.fallback_reason == "no_output"
 
 
 def test_session_id_extracted_from_first_event(oc_process):
@@ -267,6 +309,47 @@ def test_unavailable_model_error_is_fallback_eligible(oc_process):
     assert result.fallback_reason == "model_unavailable"
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        '"stream error: stream ID 1; INTERNAL_ERROR; received from peer"',
+        "connection reset by peer",
+        "connection closed before message completed",
+        "upstream connect error or disconnect/reset before headers",
+    ],
+)
+def test_transient_provider_transport_error_is_fallback_eligible(oc_process, message):
+    events = [_error(message)]
+    proc = _make_proc(_jsonl(*events))
+
+    result = oc_process._read_stream(proc, timeout=10, on_update=None)
+
+    assert result.type == "error"
+    assert result.fallback_eligible is True
+    assert result.fallback_reason == "provider_transport_error"
+
+
+def test_provider_auth_error_is_fallback_eligible(oc_process):
+    events = [
+        {
+            "type": "error",
+            "sessionID": "ses_abc",
+            "error": {
+                "name": "APIError",
+                "data": {
+                    "message": "Authentication Fails, Your api key: ****d353 is invalid",
+                    "statusCode": 401,
+                },
+            },
+        }
+    ]
+    proc = _make_proc(_jsonl(*events))
+    result = oc_process._read_stream(proc, timeout=10, on_update=None)
+    assert result.type == "error"
+    assert result.fallback_eligible is True
+    assert result.fallback_reason == "provider_auth_failed"
+
+
 def test_generic_error_is_not_fallback_eligible(oc_process):
     events = [_error("OpenCode command failed while applying patch")]
     proc = _make_proc(_jsonl(*events))
@@ -331,7 +414,7 @@ def test_non_terminal_stdout_rate_limit_words_do_not_trigger_rate_limit(oc_proce
 
 
 def test_completed_stop_beats_raw_rate_limit_noise(oc_process):
-    events = [_step_start(), _text("### SampleServiceImpl"), _step_finish(reason="stop")]
+    events = [_step_start(), _text("### PickingBizImpl"), _step_finish(reason="stop")]
     proc = MagicMock(spec=subprocess.Popen)
     proc.stdout = io.BytesIO(_jsonl(*events))
     proc.stderr = io.BytesIO(
@@ -343,7 +426,7 @@ def test_completed_stop_beats_raw_rate_limit_noise(oc_process):
 
     result = oc_process._read_stream(proc, timeout=10, on_update=None)
     assert result.type == "completed"
-    assert "SampleServiceImpl" in result.result
+    assert "PickingBizImpl" in result.result
 
 
 def test_rate_limit_detected_from_server_logs_without_stream_output(oc_process):
@@ -355,7 +438,7 @@ def test_rate_limit_detected_from_server_logs_without_stream_output(oc_process):
     proc.kill = MagicMock()
 
     with patch(
-        "uta.opencode.process.detect_rate_limit_in_logs",
+        "agent_core.harness.process.detect_rate_limit_in_logs",
         return_value={
             "provider_id": "openai",
             "model_id": "gpt-5.4",
@@ -403,6 +486,7 @@ def test_timeout_kills_process(oc_process):
         time.sleep(60)
 
     proc = MagicMock(spec=subprocess.Popen)
+    proc.pid = 12345
     proc.stdout = MagicMock()
     proc.stdout.__iter__ = slow_read
     proc.kill = MagicMock()
@@ -410,7 +494,62 @@ def test_timeout_kills_process(oc_process):
 
     result = oc_process._read_stream(proc, timeout=0.1, on_update=None)
     assert result.type == "timeout"
-    proc.kill.assert_called_once()
+    assert result.fallback_eligible is True
+    assert result.fallback_reason == "no_output"
+
+
+def test_timeout_terminates_opencode_process_group(oc_process):
+    import time
+
+    def slow_read(*args, **kwargs):
+        time.sleep(60)
+
+    proc = MagicMock(spec=subprocess.Popen)
+    proc.pid = 12345
+    proc.stdout = MagicMock()
+    proc.stdout.__iter__ = slow_read
+    proc.stderr = io.BytesIO(b"")
+    proc.wait = MagicMock(side_effect=[subprocess.TimeoutExpired(["opencode"], 1), 0])
+    proc.kill = MagicMock()
+
+    with patch("agent_core.harness.process.os.name", "posix"), patch(
+        "agent_core.harness.process.os.getpgid", return_value=54321
+    ), patch("agent_core.harness.process.os.killpg") as killpg:
+        result = oc_process._read_stream(proc, timeout=0.1, on_update=None)
+
+    assert result.type == "timeout"
+    killpg.assert_any_call(54321, signal.SIGTERM)
+    killpg.assert_any_call(54321, signal.SIGKILL)
+
+
+def test_raw_turn_jsonl_persisted_for_stdout_and_stderr(oc_process, tmp_path):
+    events = [_step_start(), _text("Hello world"), _step_finish()]
+    proc = MagicMock(spec=subprocess.Popen)
+    proc.pid = 12345
+    proc.stdout = io.BytesIO(_jsonl(*events))
+    proc.stderr = io.BytesIO(b"diagnostic stderr\n")
+    proc.returncode = 0
+    proc.wait = MagicMock(return_value=0)
+    proc.kill = MagicMock()
+    raw_log_path = tmp_path / "turn.jsonl"
+
+    result = oc_process._read_stream(
+        proc,
+        timeout=10,
+        on_update=None,
+        model_id="token-pool/gpt-5.5",
+        raw_log_path=raw_log_path,
+    )
+
+    assert result.type == "completed"
+    assert result.raw_log_path == str(raw_log_path)
+    records = [json.loads(line) for line in raw_log_path.read_text(encoding="utf-8").splitlines()]
+    assert records[0]["kind"] == "turn_start"
+    assert records[0]["model_id"] == "token-pool/gpt-5.5"
+    assert any(record["kind"] == "stream_line" and record["stream"] == "stdout" for record in records)
+    assert any(record["kind"] == "stream_line" and record["stream"] == "stderr" for record in records)
+    assert records[-1]["kind"] == "turn_finish"
+    assert records[-1]["result_type"] == "completed"
 
 
 def test_timeout_returns_rate_limit_if_logs_show_429(oc_process):
@@ -427,7 +566,7 @@ def test_timeout_returns_rate_limit_if_logs_show_429(oc_process):
     proc.wait = MagicMock(return_value=1)
 
     with patch(
-        "uta.opencode.process.detect_rate_limit_in_logs",
+        "agent_core.harness.process.detect_rate_limit_in_logs",
         return_value={
             "provider_id": "openai",
             "model_id": "gpt-5.4",
@@ -448,46 +587,56 @@ def test_timeout_returns_rate_limit_if_logs_show_429(oc_process):
     assert result.type == "rate_limited"
     assert result.error is not None
     assert result.error["retry_after_seconds"] == 2493
-    proc.kill.assert_called_once()
 
 
 # --- _build_env ---
 
 def test_env_strips_openai_key_for_openai_provider(monkeypatch):
-    monkeypatch.setattr("uta.opencode.process.settings.opencode_provider_tokens", "")
-    monkeypatch.setattr("uta.opencode.process.settings.openai_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_provider_tokens", "")
+    monkeypatch.setattr("agent_core.harness.process.settings.openai_api_key", None)
     with patch.dict("os.environ", {"PATH": "/usr/bin", "OPENAI_API_KEY": "sk-test"}, clear=True):
         env = _build_env(model_id="openai/gpt-5.5")
     assert "OPENAI_API_KEY" not in env
 
 
 def test_env_keeps_openai_key_for_other_providers():
-    with patch("uta.opencode.process._configured_providers", return_value={"cursor"}):
+    with patch("agent_core.harness.process._configured_providers", return_value={"cursor"}):
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False):
             env = _build_env()
     assert "OPENAI_API_KEY" in env
 
 
 def test_env_sets_google_key_from_settings(monkeypatch):
-    monkeypatch.setattr("uta.opencode.process.settings.gemini_api_key", "gkey-123")
-    monkeypatch.setattr("uta.opencode.process.settings.opencode_provider_tokens", "")
+    monkeypatch.setattr("agent_core.harness.process.settings.gemini_api_key", "gkey-123")
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_provider_tokens", "")
     with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
         env = _build_env(model_id="google/gemini-2.5-flash")
     assert env.get("GOOGLE_GENERATIVE_AI_API_KEY") == "gkey-123"
     assert env.get("GOOGLE_API_KEY") == "gkey-123"
 
 
+def test_env_sets_configured_opencode_data_home(monkeypatch, tmp_path):
+    data_home = tmp_path / "opencode-data"
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_data_home", str(data_home))
+
+    with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
+        env = _build_env(repo_path="/tmp/repo", model_id="token-pool/gpt-5.5")
+
+    assert env["PWD"] == "/tmp/repo"
+    assert env["XDG_DATA_HOME"] == str(data_home.resolve())
+
+
 def test_env_injects_only_selected_token_pool_token(monkeypatch):
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_chain",
+        "agent_core.harness.process.settings.opencode_provider_chain",
         "token-pool:token-pool/gpt-5.5;openai:openai/gpt-5.5;deepseek:deepseek/deepseek-v4-pro",
     )
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_tokens",
+        "agent_core.harness.process.settings.opencode_provider_tokens",
         "token-pool.token=tp-secret;openai.token=openai-secret;deepseek.token=deepseek-secret",
     )
-    monkeypatch.setattr("uta.opencode.process.settings.deepseek_api_key", None)
-    monkeypatch.setattr("uta.opencode.process.settings.openai_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.deepseek_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.openai_api_key", None)
 
     with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
         env = _build_env(model_id="token-pool/gpt-5.5")
@@ -499,16 +648,16 @@ def test_env_injects_only_selected_token_pool_token(monkeypatch):
 
 def test_env_injects_only_selected_deepseek_token(monkeypatch):
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_chain",
+        "agent_core.harness.process.settings.opencode_provider_chain",
         "token-pool:token-pool/gpt-5.5;deepseek:deepseek/deepseek-v4-pro",
     )
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_tokens",
+        "agent_core.harness.process.settings.opencode_provider_tokens",
         "token-pool.token=tp-secret;deepseek.token=deepseek-secret",
     )
-    monkeypatch.setattr("uta.opencode.process.settings.opencode_provider_base_urls", "")
-    monkeypatch.setattr("uta.opencode.process.settings.deepseek_api_key", None)
-    monkeypatch.setattr("uta.opencode.process.settings.openai_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_provider_base_urls", "")
+    monkeypatch.setattr("agent_core.harness.process.settings.deepseek_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.openai_api_key", None)
 
     with patch.dict("os.environ", {"PATH": "/usr/bin", "OPENAI_API_KEY": "leaked"}, clear=True):
         env = _build_env(model_id="deepseek/deepseek-v4-pro")
@@ -520,19 +669,19 @@ def test_env_injects_only_selected_deepseek_token(monkeypatch):
 
 def test_env_sets_openai_compatible_base_url_for_selected_provider(monkeypatch):
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_chain",
+        "agent_core.harness.process.settings.opencode_provider_chain",
         "token-pool:token-pool/gpt-5.5;deepseek:deepseek/deepseek-v4-pro",
     )
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_tokens",
+        "agent_core.harness.process.settings.opencode_provider_tokens",
         "token-pool.token=tp-secret;deepseek.token=deepseek-secret",
     )
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_base_urls",
+        "agent_core.harness.process.settings.opencode_provider_base_urls",
         "token-pool.base_url=http://token-pool.test/v1;deepseek.base_url=http://deepseek.test/v1",
     )
-    monkeypatch.setattr("uta.opencode.process.settings.deepseek_api_key", None)
-    monkeypatch.setattr("uta.opencode.process.settings.openai_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.deepseek_api_key", None)
+    monkeypatch.setattr("agent_core.harness.process.settings.openai_api_key", None)
 
     with patch.dict("os.environ", {"PATH": "/usr/bin"}, clear=True):
         env = _build_env(model_id="deepseek/deepseek-v4-pro")
@@ -543,13 +692,36 @@ def test_env_sets_openai_compatible_base_url_for_selected_provider(monkeypatch):
     assert "tp-secret" not in env.values()
 
 
-def test_env_keeps_native_openai_oauth_when_no_provider_token(monkeypatch):
+def test_env_does_not_export_openai_compatible_env_for_reserved_openai_provider(monkeypatch):
     monkeypatch.setattr(
-        "uta.opencode.process.settings.opencode_provider_chain",
+        "agent_core.harness.process.settings.opencode_provider_chain",
         "openai:openai/gpt-5.5",
     )
-    monkeypatch.setattr("uta.opencode.process.settings.opencode_provider_tokens", "")
-    monkeypatch.setattr("uta.opencode.process.settings.openai_api_key", None)
+    monkeypatch.setattr(
+        "agent_core.harness.process.settings.opencode_provider_tokens",
+        "openai.token=openai-secret",
+    )
+    monkeypatch.setattr(
+        "agent_core.harness.process.settings.opencode_provider_base_urls",
+        "openai.base_url=https://proxy.test/v1",
+    )
+    monkeypatch.setattr("agent_core.harness.process.settings.openai_api_key", None)
+
+    with patch.dict("os.environ", {"PATH": "/usr/bin", "OPENAI_API_KEY": "leaked"}, clear=True):
+        env = _build_env(model_id="openai/gpt-5.5")
+
+    assert "OPENAI_API_KEY" not in env
+    assert "OPENAI_BASE_URL" not in env
+    assert "openai-secret" not in env.values()
+
+
+def test_env_keeps_native_openai_oauth_when_no_provider_token(monkeypatch):
+    monkeypatch.setattr(
+        "agent_core.harness.process.settings.opencode_provider_chain",
+        "openai:openai/gpt-5.5",
+    )
+    monkeypatch.setattr("agent_core.harness.process.settings.opencode_provider_tokens", "")
+    monkeypatch.setattr("agent_core.harness.process.settings.openai_api_key", None)
 
     with patch.dict("os.environ", {"PATH": "/usr/bin", "OPENAI_API_KEY": "leaked"}, clear=True):
         env = _build_env(model_id="openai/gpt-5.5")

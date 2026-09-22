@@ -4,9 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from uta.maven.jacoco import find_jacoco_report, parse_jacoco_report, run_test_with_jacoco
-from uta.maven.pitest import compute_mutation_stats, find_latest_pitest_report, run_pitest
-from uta.tasks.targets import TargetRef
+from uta.enforcement.verification import verification_task_status
+from uta.language.java.maven.jacoco import find_jacoco_report, parse_jacoco_report, run_test_with_jacoco
+from uta.language.java.maven.pitest import compute_mutation_stats, find_latest_pitest_report, run_pitest
+from uta.shared.targets import TargetRef
 
 
 @dataclass(frozen=True)
@@ -286,12 +287,4 @@ def _failed(
 
 
 def _task_status_for_verification(result: JavaVerificationResult) -> str:
-    if result.status == "passed":
-        return "PASS"
-    if result.reason_code == "coverage_gate_failed":
-        return "COVERAGE_FAIL"
-    if result.reason_code in {"mutation_gate_failed", "mutation_command_failed", "missing_mutation_report"}:
-        return "MUTATION_FAIL"
-    if result.reason_code in {"test_failed", "missing_coverage_report"}:
-        return "FAIL"
-    return "FAIL"
+    return verification_task_status(result.status, result.reason_code)

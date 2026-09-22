@@ -1,0 +1,12 @@
+<component-set><components>
+  <component>
+    <role>org.apache.maven.AbstractMavenLifecycleParticipant</role>
+    <role-hint>uta-pit-compat</role-hint>
+    <implementation>uta.maven.PitRuntimeCompatibility</implementation>
+  </component>
+  <component>
+    <role>org.apache.maven.execution.MojoExecutionListener</role>
+    <role-hint>uta-pit-compat</role-hint>
+    <implementation>uta.maven.PitRuntimeCompatibility</implementation>
+  </component>
+</components></component-set>

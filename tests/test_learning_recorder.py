@@ -1,14 +1,12 @@
-"""Tests for uta.learning recorder and replayer (token_opt_phase2 L1+L2)."""
+"""Tests for uta.testgen.learning recorder and replayer (token_opt_phase2 L1+L2)."""
 
 import json
-import textwrap
-import tempfile
 from pathlib import Path
 
 import pytest
-from uta.engine.learning import TargetLearningKey
-from uta.learning.recorder import record_run_inefficiencies
-from uta.learning.replayer import load_prior_hints, preseed_compile_context
+from uta.testgen.learning.contracts import TargetLearningKey
+from uta.testgen.learning.recorder import record_run_inefficiencies
+from uta.testgen.learning.replayer import load_prior_hints, preseed_compile_context
 
 
 @pytest.fixture

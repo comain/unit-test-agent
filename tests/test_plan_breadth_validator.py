@@ -1,7 +1,6 @@
 """Tests for engine validation breadth gate."""
 
-import pytest
-from uta.engine.validation import validate_plan_breadth, BreadthVerdict
+from uta.testgen.validation import validate_plan_breadth, BreadthVerdict
 
 
 CONTEXT_WITH_METHODS = """\

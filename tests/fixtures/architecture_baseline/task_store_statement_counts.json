@@ -1,0 +1,174 @@
+{
+  "acquire_next_task": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "SELECT repo_tasks": 3,
+      "UPDATE repo_tasks": 1
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT repo_tasks",
+      "SELECT repo_tasks",
+      "UPDATE repo_tasks",
+      "SELECT repo_tasks",
+      "COMMIT"
+    ],
+    "total": 6,
+    "write_total": 1
+  },
+  "add_event": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "INSERT task_events": 1
+    },
+    "statements": [
+      "BEGIN",
+      "INSERT task_events",
+      "COMMIT"
+    ],
+    "total": 3,
+    "write_total": 1
+  },
+  "append_progress_event_batch": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "INSERT task_events": 1,
+      "SELECT repo_tasks": 1,
+      "UPDATE repo_tasks": 1
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT repo_tasks",
+      "INSERT task_events",
+      "UPDATE repo_tasks",
+      "COMMIT"
+    ],
+    "total": 5,
+    "write_total": 2
+  },
+  "complete_workflow_operation": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "SELECT workflow_operations": 2,
+      "UPDATE workflow_operations": 1
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT workflow_operations",
+      "UPDATE workflow_operations",
+      "SELECT workflow_operations",
+      "COMMIT"
+    ],
+    "total": 5,
+    "write_total": 1
+  },
+  "create_task": {
+    "commit_total": 6,
+    "counts": {
+      "BEGIN": 6,
+      "COMMIT": 6,
+      "INSERT": 3,
+      "INSERT repo_tasks": 1,
+      "INSERT task_events": 2,
+      "SELECT class_tasks": 2,
+      "SELECT repo_branches": 3,
+      "SELECT repo_tasks": 1,
+      "UPDATE class_tasks": 2,
+      "UPDATE repo_branches": 1
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT repo_branches",
+      "SELECT repo_branches",
+      "INSERT",
+      "SELECT repo_branches",
+      "COMMIT",
+      "SELECT repo_tasks",
+      "BEGIN",
+      "INSERT repo_tasks",
+      "UPDATE repo_branches",
+      "COMMIT",
+      "BEGIN",
+      "INSERT",
+      "UPDATE class_tasks",
+      "SELECT class_tasks",
+      "COMMIT",
+      "BEGIN",
+      "INSERT",
+      "UPDATE class_tasks",
+      "SELECT class_tasks",
+      "COMMIT",
+      "BEGIN",
+      "INSERT task_events",
+      "COMMIT",
+      "BEGIN",
+      "INSERT task_events",
+      "COMMIT"
+    ],
+    "total": 27,
+    "write_total": 9
+  },
+  "finish_task_with_terminal_event": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "INSERT task_events": 1,
+      "SELECT repo_tasks": 1,
+      "UPDATE repo_tasks": 1
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT repo_tasks",
+      "UPDATE repo_tasks",
+      "INSERT task_events",
+      "COMMIT"
+    ],
+    "total": 5,
+    "write_total": 2
+  },
+  "record_workflow_operation_cost": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "INSERT workflow_operation_accounting": 1,
+      "SELECT workflow_operation_accounting": 2
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT workflow_operation_accounting",
+      "INSERT workflow_operation_accounting",
+      "SELECT workflow_operation_accounting",
+      "COMMIT"
+    ],
+    "total": 5,
+    "write_total": 1
+  },
+  "start_workflow_operation": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "INSERT workflow_operations": 1,
+      "SELECT workflow_operations": 2
+    },
+    "statements": [
+      "BEGIN",
+      "SELECT workflow_operations",
+      "INSERT workflow_operations",
+      "SELECT workflow_operations",
+      "COMMIT"
+    ],
+    "total": 5,
+    "write_total": 1
+  }
+}

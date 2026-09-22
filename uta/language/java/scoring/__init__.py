@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from uta.engine.scoring import TargetScoreResult
-from uta.engine.targets import TargetRef
+from uta.shared.scoring import TargetScoreResult
+from uta.shared.targets import TargetRef
 
 
 class JavaTargetScorer:

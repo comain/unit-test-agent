@@ -1,10 +1,16 @@
 import os
+import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from uta.engine.languages import RawTargetSelection, default_registry
-from uta.language.python.verification.runner import resolve_python_runtime_config, verify_python_target
+from uta.shared.languages import RawTargetSelection, default_registry
+from uta.language.python.verification.runner import (
+    UTA_OWNED_MUTMUT_VERSION,
+    resolve_python_runtime_config,
+    verify_python_target,
+)
 
 
 def _completed(cmd, returncode=0, stdout="", stderr=""):
@@ -18,15 +24,18 @@ def test_phase5_fixture_python3_verification_loop_records_gates(tmp_path):
     (repo / "jobs").mkdir()
     (repo / "jobs" / "forecast.py").write_text("def run():\n    return 1\n", encoding="utf-8")
     coverage_xml = repo / ".uta_cache" / "python" / "coverage" / "coverage.xml"
+    mutant_key = "jobs.forecast.x_run__mutmut_1"
 
     def fake_run(cmd, cwd=None, timeout=None, env=None):
         if cmd[:2] == ["python3", "--version"]:
             return _completed(cmd, stdout="Python 3.11.8")
         if cmd[:3] == ["python3", "-m", "pytest"]:
             return _completed(cmd, stdout="pytest 8.0.0")
+        if cmd[:3] == ["python3", "-m", "py_compile"]:
+            return _completed(cmd)
         if cmd[:3] == ["python3", "-m", "coverage"] and cmd[3] == "--version":
             return _completed(cmd, stdout="Coverage.py 7.0")
-        if cmd[:4] == ["python3", "-m", "coverage", "run"]:
+        if cmd[0] == "python3" and Path(cmd[1]).name == "pytest_process.py" and "--coverage-include" in cmd:
             return _completed(cmd)
         if cmd[:4] == ["python3", "-m", "coverage", "xml"]:
             coverage_xml.parent.mkdir(parents=True, exist_ok=True)
@@ -37,9 +46,27 @@ def test_phase5_fixture_python3_verification_loop_records_gates(tmp_path):
                 encoding="utf-8",
             )
             return _completed(cmd)
+        if cmd[:4] == ["python3", "-m", "pip", "install"]:
+            # The fixture's manifest sits at the repository root, which is now a
+            # candidate for the overlay rather than being skipped.
+            return _completed(cmd)
         if cmd[:2] == ["mutmut", "--version"]:
-            return _completed(cmd, stdout="mutmut 3.0.0")
-        if cmd[:2] == ["mutmut", "run"]:
+            return _completed(cmd, stdout=f"mutmut {UTA_OWNED_MUTMUT_VERSION}")
+        if cmd[:2] == ["python3", "-c"] and cmd[-2] == "metadata":
+            meta_path = repo / "mutants" / "jobs" / "forecast.py.meta"
+            meta_path.parent.mkdir(parents=True, exist_ok=True)
+            meta_path.write_text(json.dumps({"exit_code_by_key": {mutant_key: None}}), encoding="utf-8")
+            meta_path.with_suffix(meta_path.suffix + ".uta.json").write_text(
+                json.dumps(
+                    {
+                        "line_by_key": {mutant_key: 2},
+                        "operator_by_key": {mutant_key: "constant_value"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return _completed(cmd, stdout="UTA_MUTMUT_GENERATION_STATS mutated=1 unmodified=0 ignored=0")
+        if cmd[:2] == ["python3", "-c"] and cmd[-2] == "run":
             return _completed(cmd, stdout="1 generated, 1 killed, 0 survived, 0 no coverage")
         raise AssertionError(f"unexpected command: {cmd}")
 
@@ -52,6 +79,7 @@ def test_phase5_fixture_python3_verification_loop_records_gates(tmp_path):
         mutation_gate=100.0,
         config=resolve_python_runtime_config(repo, environ={}),
         run_command=fake_run,
+        changed_lines={"jobs/forecast.py": {2}},
     )
 
     fields = result.as_result_fields()

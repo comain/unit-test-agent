@@ -1,7 +1,6 @@
-"""Tests for uta.engine.wave_assigner (K strategy — deterministic wave assignment)."""
+"""Tests for uta.testgen.wave_assigner (K strategy — deterministic wave assignment)."""
 
-import pytest
-from uta.engine.wave_assigner import assign_waves, assign_waves_from_context, format_wave_table, MethodWave
+from uta.testgen.wave_assigner import assign_waves, assign_waves_from_context, format_wave_table, MethodWave
 
 
 CONTEXT_WITH_METHODS = """\

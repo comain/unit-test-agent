@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from uta.engine.parse import ParseProjectRequest, ParseProvider, make_parse_provider
+from uta.shared.parse import ParseProjectRequest, ParseProvider, make_parse_provider
 from uta.language.java.parse import JavaParseProjectResult
 from uta.language.python.parse import PythonParseProjectResult
 

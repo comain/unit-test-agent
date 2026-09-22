@@ -1,0 +1,47 @@
+{
+  "note": "The UTA and distributed marker renderers already differ. Both are frozen as they are; parity is asserted on the evidence payload verdict only, never on the surrounding marker block.",
+  "standalone": {
+    "carries_evidence_prefix": true,
+    "marker_lines": [
+      "[test-enforcer] python evidence passed passed",
+      "[test-enforcer] python diff line coverage 100.00% passed (1/1)",
+      "[test-enforcer] python diff mutation score 100.00% passed (0 diff survivors, 1 diff mutants)"
+    ],
+    "payload_verdict": {
+      "backend": "python_enforcer",
+      "coverage_passed": true,
+      "coverage_rate": 100.0,
+      "coverage_scope": "changed_lines",
+      "language": "python",
+      "mutation_passed": true,
+      "mutation_survived": 0,
+      "passed": true,
+      "reasonCode": "passed",
+      "schemaVersion": 1,
+      "status": "passed"
+    }
+  },
+  "uta": {
+    "carries_evidence_prefix": true,
+    "marker_lines": [
+      "[test-enforcer] python enforcement passed reason=passed schema=1",
+      "[test-enforcer] python diff line coverage 100.00% passed (1/1)",
+      "[test-enforcer] python diff mutation score 100.00% passed (0 diff survivors, 1 diff mutants, 1 file mutants)",
+      "[test-enforcer] python mutation candidate plan unknown eligible=N selected=N/N scored=N killed=N survived=N",
+      "[test-enforcer] python test quality 1 advisory warning(s) top=python-happy-path-only-hintx1 (coverage/mutation gates unaffected)"
+    ],
+    "payload_verdict": {
+      "backend": "python_enforcer",
+      "coverage_passed": true,
+      "coverage_rate": 100.0,
+      "coverage_scope": "changed_lines",
+      "language": "python",
+      "mutation_passed": true,
+      "mutation_survived": 0,
+      "passed": true,
+      "reasonCode": "passed",
+      "schemaVersion": 1,
+      "status": "passed"
+    }
+  }
+}

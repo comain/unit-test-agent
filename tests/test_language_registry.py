@@ -2,35 +2,29 @@ from pathlib import Path
 
 import pytest
 
-from uta.engine.languages import (
+from uta.shared.languages import (
     AmbiguousLanguageError,
     BackendRegistry,
     DetectionSignal,
-    GeneratedTestPolicy,
-    LanguageAdapter,
-    LanguageCapabilities,
+    LanguageBackend,
+    LanguageDetector,
+    PromptBundle,
     RawTargetSelection,
+    TargetNormalizer,
     UnsupportedLanguageError,
     default_registry,
     resolve_language,
 )
 
 
-class ToyAdapter(LanguageAdapter):
+class ToyBackend(LanguageBackend):
     language = "toy"
-
-    def capabilities(self):
-        return LanguageCapabilities(
-            supports_function_targets=True,
-            supports_branch_coverage=False,
-            supports_mutation=False,
-            supports_incremental_diff_enforcement=False,
-            supports_import_safety_hints=False,
-            generated_tests_are_autopushable=False,
-        )
 
     def detect(self, repo_path: Path, changed_paths=None):
         return DetectionSignal(self.language, 1, ["toy.marker"]) if (repo_path / "toy.marker").exists() else DetectionSignal(self.language, 0, [])
+
+    def is_production_source_path(self, path: str) -> bool:
+        return str(path or "").endswith(".toy")
 
     def normalize_target(self, raw):
         target = raw.target or raw.target_id or raw.symbol or "toy:all"
@@ -42,8 +36,8 @@ class ToyAdapter(LanguageAdapter):
             symbol=str(target),
         )
 
-    def generated_test_policy(self, repo_path: Path, target):
-        return GeneratedTestPolicy(language=self.language, allowed_test_roots=("tests/toy_generated",))
+    def prompt_bundle(self) -> PromptBundle:
+        return PromptBundle(language=self.language, generate="toy_generate_test")
 
 
 def test_default_registry_contains_java_and_python():
@@ -51,25 +45,25 @@ def test_default_registry_contains_java_and_python():
 
     assert registry.adapter_for("java").language == "java"
     assert registry.adapter_for("python").language == "python"
-    assert registry.capabilities_for("python").supports_function_targets is True
-    assert registry.generated_test_policy("python", Path("/repo"), None).allowed_test_roots
+    assert registry.prompt_bundle("python").generate == "python_generate_test"
+    assert registry.prompt_bundle("java").generate == "generate_test"
 
 
 def test_registry_rejects_duplicate_and_unknown_language():
     registry = BackendRegistry()
-    registry.register_language(ToyAdapter())
+    registry.register_language(ToyBackend())
 
     with pytest.raises(ValueError, match="already registered"):
-        registry.register_language(ToyAdapter())
+        registry.register_language(ToyBackend())
     with pytest.raises(UnsupportedLanguageError):
         registry.adapter_for("python")
 
 
 def test_fake_third_language_can_register_and_normalize_target(tmp_path):
     registry = BackendRegistry()
-    registry.register_language(ToyAdapter())
+    registry.register_language(ToyBackend())
 
-    target = registry.adapter_for("toy").normalize_target(RawTargetSelection(target="widget"))
+    target = registry.normalizer_for("toy").normalize_target(RawTargetSelection(target="widget"))
 
     assert target.language == "toy"
     assert target.target_id == "toy:widget"
@@ -124,3 +118,56 @@ def test_language_detection_can_use_changed_file_suffixes(tmp_path):
 
     assert decision.language == "python"
     assert decision.source == "changed_files"
+
+
+def test_registry_hands_out_one_narrow_port_at_a_time():
+    """A caller that classifies paths gets the detector, not a batch generator."""
+    registry = BackendRegistry()
+    registry.register_language(ToyBackend())
+
+    detector = registry.detector_for("toy")
+    normalizer = registry.normalizer_for("toy")
+
+    assert isinstance(detector, LanguageDetector)
+    assert isinstance(normalizer, TargetNormalizer)
+    assert detector.is_production_source_path("widget.toy") is True
+    assert detector.is_production_source_path("widget.java") is False
+
+
+def test_narrow_accessors_reject_an_unregistered_language():
+    registry = BackendRegistry()
+    registry.register_language(ToyBackend())
+
+    with pytest.raises(UnsupportedLanguageError):
+        registry.detector_for("java")
+    with pytest.raises(UnsupportedLanguageError):
+        registry.normalizer_for("java")
+
+
+def test_the_umbrella_adapter_protocol_is_retired():
+    """`LanguageAdapter` mixed detection with policy, prompts, and batch generation.
+
+    The registry no longer publishes the feature-flag and generated-test-root
+    passthroughs either: nothing under `uta/` ever read them, so they were
+    surface without a consumer rather than a capability.
+    """
+    import uta.shared.languages as languages
+
+    assert not hasattr(languages, "LanguageAdapter")
+    assert not hasattr(languages, "LanguageCapabilities")
+    assert not hasattr(languages, "GeneratedTestPolicy")
+    assert not hasattr(BackendRegistry, "capabilities_for")
+    assert not hasattr(BackendRegistry, "generated_test_policy")
+
+
+def test_language_backends_expose_no_generation_or_workspace_methods():
+    """Detection and normalization do not drag batch generation in with them."""
+    registry = default_registry()
+
+    for language in ("java", "python"):
+        backend = registry.adapter_for(language)
+        assert not hasattr(backend, "capabilities")
+        assert not hasattr(backend, "generated_test_policy")
+        assert not hasattr(backend, "workspace_policy")
+        assert not hasattr(backend, "batch_generator")
+        assert not hasattr(backend, "test_generation_backend")

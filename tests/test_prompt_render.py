@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 from jinja2 import Template
-from uta.prompts.loader import render_prompt_split
+from uta.testgen.prompts.loader import render_prompt_split
 from uta.language.java.context_builder import ContextBuilder
 from uta.language.java.parse.java_parser import JavaParser
 from uta.language.java.parse.graph_builder import GraphBuilder
@@ -83,6 +83,88 @@ def test_ci_incremental_generation_prompt_names_final_diff_gate():
     assert "Do not chase unrelated class-wide coverage or mutation gaps" in rendered
 
 
+def test_behavior_aware_test_quality_rules_render_in_core_prompts():
+    python_stable, python_volatile = render_prompt_split(
+        "python_generate_test",
+        display_name="jobs/foo.py",
+        target_id="pyfile:jobs/foo.py",
+        source_path="jobs/foo.py",
+        canonical_module="jobs.foo",
+        symbol="",
+        syntax_version="python3",
+        parser_backend="tree-sitter",
+        generated_test_path="tests/uta_generated/test_jobs_foo.py",
+        existing_test_path="",
+        existing_test_reasons=[],
+        context_abs="/ctx/foo.md",
+        context_json_abs="/ctx/foo.json",
+        index_query_command="/bin/uta-query-index",
+        companion_files=[],
+        side_effect_hints=[],
+        changed_line_hints=[],
+        scored_methods=[],
+        prior_hints=[],
+    )
+    java_stable, java_volatile = render_prompt_split(
+        "generate_test",
+        class_fqn="com.example.Foo",
+        source_path="/repo/Foo.java",
+        context_dir="/ctx",
+        target_context_abs="/ctx/Foo.context.md",
+        target_symbols_abs="/ctx/Foo.symbols.md",
+        index_query_command="/bin/uta-query-index",
+        wave_one_only=False,
+        maven_instructions="",
+        maven_module_flag="",
+        test_class_name="FooTest",
+        coverage_gate=80,
+        run_id="run-1",
+        stage_introspect_abs="",
+        mockito_api_guidance="",
+        context_summary_abs="/ctx/summary.md",
+        test_guidance_abs="/ctx/guidance.md",
+        repo_summary_exists=False,
+        compile_facts_exists=False,
+    )
+    mutation_stable, mutation_volatile = render_prompt_split(
+        "python_fix_mutations",
+        display_name="jobs/foo.py",
+        target_id="pyfile:jobs/foo.py",
+        source_path="jobs/foo.py",
+        canonical_module="jobs.foo",
+        symbol="",
+        generated_test_path="tests/uta_generated/test_jobs_foo.py",
+        test_file_path="tests/uta_generated/test_jobs_foo.py",
+        mutation_gate=95,
+        ci_diff_mutation_gate=95,
+        context_abs="/ctx/foo.md",
+        target_context_abs="/ctx/foo.md",
+        context_json_abs="/ctx/foo.json",
+        index_query_command="/bin/uta-query-index",
+        mutation_repair_context_abs="/ctx/mutation.md",
+        mutation_repair_roi_guided_full=False,
+        mutation_repair_split=False,
+        mutation_repair_group_abs="",
+        mutation_repair_group="",
+        mutation_diagnostics="survivor: boundary",
+        mutation_report="survivor: boundary",
+    )
+
+    rendered = "\n".join([
+        python_stable + python_volatile,
+        java_stable + java_volatile,
+        mutation_stable + mutation_volatile,
+    ])
+
+    assert "Do not mirror production implementation logic" in rendered
+    assert "Assert observable behavior" in rendered
+    assert "boundary and failure-mode cases" in rendered
+    assert "surviving mutants as missing behavior checks" in rendered
+    assert python_stable.count("Derive intended behavior from sources in this priority order") == 1
+    assert java_stable.count("Derive intended behavior from sources in this priority order") == 1
+    assert "prefer documented behavior" in mutation_stable
+
+
 def test_render_generate_test(fixtures_dir):
     parser = JavaParser()
     service_path = os.path.join(fixtures_dir, "SampleService.java")
@@ -104,11 +186,11 @@ def test_render_generate_test(fixtures_dir):
         source_path = context_builder.get_class_source_path("com.example.service.SampleService")
 
         # Read template
-        template_path = os.path.join("uta", "prompts", "generate_test.txt")
+        template_path = os.path.join("uta", "testgen", "prompts", "generate_test.txt")
         with open(template_path, "r") as f:
             template = Template(f.read())
 
-        from uta.engine.project_summary_artifacts import (
+        from uta.testgen.project_summary_artifacts import (
             merge_compile_fix_facts,
             sync_project_summaries,
             prompt_template_paths,
@@ -205,7 +287,7 @@ def test_export_context_files_content(fixtures_dir):
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ContextBuilder(repo_path=tmpdir, graph=graph, flows=flows)
         context_dir = ctx.export_context_files()
-        from uta.engine.project_summary_artifacts import prompt_template_paths, sync_project_summaries
+        from uta.testgen.project_summary_artifacts import prompt_template_paths, sync_project_summaries
 
         sync_project_summaries(tmpdir, graph, None)
         assert (context_dir / "project_summary.md").exists()
@@ -220,10 +302,10 @@ def test_export_context_files_content(fixtures_dir):
         assert "`sampleMapper` : `SampleMapper`" in class_map
 
 
-def test_ci_context_path_renders_in_all_prompt_tails(tmp_path):
-    ci_context = tmp_path / "ci_context.md"
-    ci_context.write_text("# CI Context\nOnly unit-test repair context.", encoding="utf-8")
-    common = {"ci_context_abs": str(ci_context), "stage_introspect_abs": ""}
+def test_rdc_context_path_renders_in_all_prompt_tails(tmp_path):
+    rdc_context = tmp_path / "rdc_context.md"
+    rdc_context.write_text("# RDC Context\nOnly unit-test repair context.", encoding="utf-8")
+    common = {"rdc_context_abs": str(rdc_context), "stage_introspect_abs": ""}
 
     prompts = {
         "plan_tests": dict(
@@ -295,11 +377,11 @@ def test_ci_context_path_renders_in_all_prompt_tails(tmp_path):
 
     for name, kwargs in prompts.items():
         _, tail = render_prompt_split(name, **kwargs, **common)
-        assert str(ci_context) in tail
+        assert str(rdc_context) in tail
         assert "production-code edit requests are unsupported" in tail or "production-code edits" in tail
 
 
-def test_ci_context_prompt_absent_when_not_provided():
+def test_rdc_context_prompt_absent_when_not_provided():
     _, tail = render_prompt_split(
         "plan_tests",
         batch=["com.example.Foo"],
@@ -311,12 +393,12 @@ def test_ci_context_prompt_absent_when_not_provided():
         stage_introspect_abs="",
     )
 
-    assert "CI CONTEXT" not in tail
+    assert "RDC CONTEXT" not in tail
 
 
-def test_ci_context_rejects_production_code_edit_request(tmp_path):
-    ci_context = tmp_path / "ci_context.md"
-    ci_context.write_text("Please modify src/main/java/com/example/Foo.java", encoding="utf-8")
+def test_rdc_context_rejects_production_code_edit_request(tmp_path):
+    rdc_context = tmp_path / "rdc_context.md"
+    rdc_context.write_text("Please modify src/main/java/com/example/Foo.java", encoding="utf-8")
 
     with pytest.raises(ValueError, match="production-code edits"):
         render_prompt_split(
@@ -328,30 +410,20 @@ def test_ci_context_rejects_production_code_edit_request(tmp_path):
             index_query_command="/bin/uta-query-index",
             roi_enabled=False,
             stage_introspect_abs="",
-            ci_context_abs=str(ci_context),
+            rdc_context_abs=str(rdc_context),
         )
-        assert "Imports:" in class_map
 
-        # Dependency map should show SampleService depends on SampleMapper
-        dep_map = (context_dir / "dependency_map.md").read_text()
-        assert "SampleService" in dep_map or "SampleMapper" in dep_map
-
-        # Process flows should be non-empty if flows were detected
-        pf = (context_dir / "process_flows.md").read_text()
-        assert "Process Flows" in pf
-
-        target_paths = ctx.export_target_context_files("com.example.service.SampleService")
-        target_context = Path(target_paths["context_abs"]).read_text()
-        target_symbols = Path(target_paths["symbols_abs"]).read_text()
-        assert "Expected test path" not in target_context
-        assert "## Fields" in target_context
-        assert "sampleMapper" in target_context
-        assert "## Imported Symbols" in target_symbols
-        assert "SampleMapper" in target_symbols
+    # Eighteen assertions about exported context files used to sit here: inside
+    # the `pytest.raises` block, after the call that raises, referring to names
+    # (`class_map`, `context_dir`, `ctx`) this function never bound. They were
+    # leftovers from a context-export test merged into this one, and they never
+    # ran. What they checked is covered live by the two tests above and below --
+    # `dependency_map.md`/`process_flows.md` existence at line 258, and exported
+    # context/symbol content in `test_export_context_files_content`.
 
 
 def test_render_fix_mutations_prefers_coverage_when_low():
-    template_path = os.path.join("uta", "prompts", "fix_mutations.txt")
+    template_path = os.path.join("uta", "testgen", "prompts", "fix_mutations.txt")
     with open(template_path, "r") as f:
         template = Template(f.read())
 
@@ -379,7 +451,7 @@ def test_render_fix_mutations_prefers_coverage_when_low():
 
 
 def test_render_fix_coverage_targets_gate():
-    template_path = os.path.join("uta", "prompts", "fix_coverage.txt")
+    template_path = os.path.join("uta", "testgen", "prompts", "fix_coverage.txt")
     with open(template_path, "r") as f:
         template = Template(f.read())
 
@@ -407,7 +479,7 @@ def test_render_fix_coverage_targets_gate():
 
 
 def test_render_plan_tests_prompt():
-    template_path = os.path.join("uta", "prompts", "plan_tests.txt")
+    template_path = os.path.join("uta", "testgen", "prompts", "plan_tests.txt")
     with open(template_path, "r") as f:
         template = Template(f.read())
 
@@ -441,7 +513,7 @@ def test_render_plan_tests_prompt():
 
 
 def test_render_plan_tests_prompt_with_strict_coverage_classes():
-    template_path = os.path.join("uta", "prompts", "plan_tests.txt")
+    template_path = os.path.join("uta", "testgen", "prompts", "plan_tests.txt")
     with open(template_path, "r") as f:
         template = Template(f.read())
 
@@ -474,7 +546,7 @@ def test_render_fix_compile_renders_volatile_at_end():
     """fix_compile.txt is restructured with stable rules first and volatile per-call
     data after a `{# CACHE_BOUNDARY #}` marker (token_opt_phase2 strategy A).
     """
-    template_path = os.path.join("uta", "prompts", "fix_compile.txt")
+    template_path = os.path.join("uta", "testgen", "prompts", "fix_compile.txt")
     with open(template_path, "r") as f:
         template = Template(f.read())
 
@@ -499,25 +571,27 @@ def test_render_fix_compile_renders_volatile_at_end():
 
 
 def test_prompt_loader_split_fix_compile():
-    from uta.prompts import (
+    from uta.testgen.prompts import (
         CACHE_BOUNDARY_MARKER,
         load_prompt_split,
         render_prompt_split,
     )
 
-    raw = (Path("uta") / "prompts" / "fix_compile.txt").read_text()
+    raw = (Path("uta") / "testgen" / "prompts" / "fix_compile.txt").read_text()
     assert CACHE_BOUNDARY_MARKER in raw, "fix_compile.txt must declare a cache boundary"
 
     stable_t, volatile_t = load_prompt_split("fix_compile")
-    assert stable_t.render(maven_module_flag=" -pl biz")  # stable region renders standalone
-    # Volatile region carries the per-call placeholders
-    rendered_volatile = volatile_t.render(
+    render_values = dict(
         class_fqn="com.example.X",
         test_file_path="src/test/java/com/example/XTest.java",
         target_context_abs="/tmp/X.context.md",
         target_symbols_abs="/tmp/X.symbols.md",
         compile_errors="[ERROR] foo",
+        maven_module_flag=" -pl biz",
     )
+    assert stable_t.render(**render_values)
+    # Volatile region carries the per-call placeholders
+    rendered_volatile = volatile_t.render(**render_values)
     assert "PER-CALL TARGET" in rendered_volatile
     assert "[ERROR] foo" in rendered_volatile
 
@@ -532,7 +606,7 @@ def test_prompt_loader_split_fix_compile():
     )
     # Joining the two halves yields the same content as a single full render
     # (the cache boundary marker is a Jinja comment that collapses to whitespace).
-    from uta.prompts import render_prompt
+    from uta.testgen.prompts import render_prompt
     full = render_prompt(
         "fix_compile",
         class_fqn="com.example.X",
@@ -547,27 +621,25 @@ def test_prompt_loader_split_fix_compile():
     assert joined == full_norm
 
 
-def test_prompt_loader_split_no_marker_treats_all_as_volatile():
-    from jinja2 import Template
-    from uta.prompts import load_prompt_split
+def test_prompt_loader_split_no_marker_treats_all_as_volatile(tmp_path, monkeypatch):
+    from agent_core.prompts import PromptLibrary
+    from uta.testgen.prompts import loader
 
-    # plan_tests.txt currently has no boundary marker.
-    raw = (Path("uta") / "prompts" / "plan_tests.txt").read_text()
-    if "{# CACHE_BOUNDARY #}" in raw:
-        return  # skip if a future commit adds one
-    stable_t, volatile_t = load_prompt_split("plan_tests")
-    assert isinstance(stable_t, Template)
-    assert stable_t.render() == ""
-    assert volatile_t.render(
-        batch=["com.example.X"],
-        coverage_gate=80,
-        strict_coverage_classes=[],
-        target_context_files="- `com.example.X`",
-    ).strip().startswith("You")
+    (tmp_path / "synthetic_no_boundary.txt").write_text(
+        "Synthetic prompt for {{ target }}.\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        loader,
+        "_PROMPT_LIBRARY",
+        PromptLibrary(tmp_path, cache_source_text=True),
+    )
+    stable_t, volatile_t = loader.load_prompt_split("synthetic_no_boundary")
+    assert stable_t.render(target="com.example.X") == ""
+    assert volatile_t.render(target="com.example.X") == "Synthetic prompt for com.example.X."
 
 
 def test_render_generate_prompt_discourages_actor_framework_mocks():
-    template_path = os.path.join("uta", "prompts", "generate_test.txt")
+    template_path = os.path.join("uta", "testgen", "prompts", "generate_test.txt")
     with open(template_path, "r") as f:
         template = Template(f.read())
 
@@ -597,3 +669,87 @@ def test_render_generate_prompt_discourages_actor_framework_mocks():
     assert "SOURCE LOOKUP ORDER FOR EXTERNAL TYPES" in rendered
     assert "sibling API/source repos listed in `/tmp/test_generation_guidance.md`" in rendered
     assert "Do NOT unpack jars, inspect `.class` files, run `javap`, or run Java decompilers during generation." in rendered
+
+
+def _python_generate_kwargs():
+    return dict(
+        display_name="jobs/foo.py",
+        target_id="pyfile:jobs/foo.py",
+        source_path="jobs/foo.py",
+        canonical_module="jobs.foo",
+        symbol="",
+        syntax_version="python3",
+        parser_backend="tree-sitter",
+        generated_test_path="tests/uta_generated/test_jobs_foo.py",
+        existing_test_path="",
+        existing_test_reasons=[],
+        context_abs="/ctx/foo.md",
+        context_json_abs="/ctx/foo.json",
+        index_query_command="/bin/uta-query-index",
+        companion_files=[],
+        side_effect_hints=[],
+        changed_line_hints=[],
+        scored_methods=[],
+        prior_hints=[],
+    )
+
+
+def test_spec_context_block_renders_only_when_supplied():
+    without = render_prompt_split("python_generate_test", **_python_generate_kwargs())
+    empty = render_prompt_split("python_generate_test", spec_context="", **_python_generate_kwargs())
+    supplied = render_prompt_split(
+        "python_generate_test",
+        spec_context="Refunds allowed within 30 days; cap is $500.",
+        **_python_generate_kwargs(),
+    )
+
+    assert empty == without
+    assert "SUPPLIED BEHAVIOR CONTEXT" not in without[0] + without[1]
+    assert supplied[0] == without[0]
+    assert "### SUPPLIED BEHAVIOR CONTEXT" in supplied[1]
+    assert "Refunds allowed within 30 days; cap is $500." in supplied[1]
+
+
+def test_spec_context_block_renders_in_java_generate_and_plan_prompts():
+    java_kwargs = dict(
+        class_fqn="com.example.Foo",
+        source_path="/repo/Foo.java",
+        context_dir="/ctx",
+        target_context_abs="/ctx/Foo.context.md",
+        target_symbols_abs="/ctx/Foo.symbols.md",
+        index_query_command="/bin/uta-query-index",
+        wave_one_only=False,
+        maven_instructions="",
+        maven_module_flag="",
+        test_class_name="FooTest",
+        coverage_gate=80,
+        run_id="run-1",
+        stage_introspect_abs="",
+        mockito_api_guidance="",
+        context_summary_abs="/ctx/summary.md",
+        test_guidance_abs="/ctx/guidance.md",
+        repo_summary_exists=False,
+        compile_facts_exists=False,
+    )
+    plan_kwargs = dict(
+        batch=["com.example.Foo"],
+        coverage_gate=80,
+        quality_mode="class_batch",
+        ci_diff_coverage_gate=95,
+        ci_diff_mutation_gate=95,
+        strict_coverage_classes=[],
+        target_context_files="",
+        roi_enabled=False,
+        index_query_command="/bin/uta-query-index",
+        stage_introspect_abs="",
+    )
+
+    java_without = render_prompt_split("generate_test", **java_kwargs)
+    java_with = render_prompt_split("generate_test", spec_context="Order totals include tax.", **java_kwargs)
+    plan_without = render_prompt_split("plan_tests", **plan_kwargs)
+    plan_with = render_prompt_split("plan_tests", spec_context="Order totals include tax.", **plan_kwargs)
+
+    assert render_prompt_split("generate_test", spec_context="", **java_kwargs) == java_without
+    assert "Order totals include tax." in java_with[1]
+    assert render_prompt_split("plan_tests", spec_context="", **plan_kwargs) == plan_without
+    assert "Order totals include tax." in plan_with[1]

@@ -1,7 +1,6 @@
 """E2E Phase 1: Parallel-safe pipeline — no port collisions, worker pool logic."""
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -11,7 +10,7 @@ def _uta_command():
     uta_bin = Path(sys.executable).parent / "uta"
     if uta_bin.exists():
         return [str(uta_bin)]
-    return [sys.executable, "-m", "uta.cli"]
+    return [sys.executable, "-m", "uta.app.cli"]
 
 
 def _make_db(tmp_path):
@@ -101,17 +100,13 @@ class TestParallelWorkerPool:
         assert task2 is None
 
     def test_no_opencode_server_class_in_run_pipeline(self):
-        """run and resume_gates commands should not reference OpenCodeServer."""
+        """The durable run command should not reference OpenCodeServer."""
         import inspect
-        import uta.cli as cli_module
+        import uta.app.cli as cli_module
 
         run_fn = cli_module.run.callback if hasattr(cli_module.run, "callback") else cli_module.run
         src = inspect.getsource(run_fn)
         assert "OpenCodeServer" not in src, "run command must not use OpenCodeServer"
-
-        resume_fn = cli_module.resume_gates.callback if hasattr(cli_module.resume_gates, "callback") else cli_module.resume_gates
-        src2 = inspect.getsource(resume_fn)
-        assert "OpenCodeServer" not in src2, "resume_gates command must not use OpenCodeServer"
 
     def test_daemon_dispatches_two_slots_concurrently(self, tmp_path):
         """Daemon with max-parallel=2 launches two subprocesses at the same time.
@@ -121,7 +116,6 @@ class TestParallelWorkerPool:
         """
         from uta.tasks.db import TaskDB
         from uta.tasks.manager import TaskManager
-        from uta.tasks.scheduler import TaskScheduler
 
         db_path = str(tmp_path / "tasks.db")
         db = TaskDB(db_path)

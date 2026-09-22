@@ -360,7 +360,10 @@ if [[ ! -x "$VENV_DIR/bin/python" ]]; then
 fi
 
 "$VENV_DIR/bin/python" -m pip install --upgrade pip setuptools wheel
-"$VENV_DIR/bin/python" -m pip install -e "$ROOT_DIR"
+"$VENV_DIR/bin/python" -m pip install --no-build-isolation -e "$ROOT_DIR"
+# Fail here rather than at the first generated test run: pytest is a runtime
+# dependency now, and a venv without it produces a confusing failure much later.
+"$VENV_DIR/bin/python" -m pytest --version >/dev/null
 
 install_maven_if_needed
 install_maven_settings_if_needed
@@ -386,7 +389,7 @@ Task DB:     $TASK_DB
 Maven:       $MAVEN_BIN
 Mvn settings: $MAVEN_SETTINGS_PATH
 OpenCode:    $OPENCODE_BIN
-Python enforcement: modern=${UTA_PYTHON_BIN:-$VENV_DIR/bin/python}; legacy-python2=${UTA_PYTHON2_BIN:-not configured}; legacy-mutmut=${UTA_PYTHON2_MUTMUT_BIN:-not configured}
+Python enforcement: modern=${UTA_PYTHON_BIN:-$VENV_DIR/bin/python}; mutmut=${UTA_PYTHON_MUTMUT_BIN:-repo/default auto}; legacy-python2=${UTA_PYTHON2_BIN:-not configured}; legacy-mutmut=${UTA_PYTHON2_MUTMUT_BIN:-not configured}
 
 Next:
   export UTA_RUNNER_HOME="$RUNNER_HOME"
@@ -397,6 +400,8 @@ Next:
   "$VENV_DIR/bin/uta" python-enforce --help
   # Equivalent readiness check: python -c "import tree_sitter_python"
   "$VENV_DIR/bin/python" -c "import tree_sitter_python"
+  # Optional modern lane override, for example to match repair-session mutmut:
+  # export UTA_PYTHON_MUTMUT_BIN=/path/to/mutmut
   # Optional legacy lane:
   # export UTA_PYTHON2_BIN=/path/to/python2.7
   # export UTA_PYTHON2_MUTMUT_BIN=/path/to/mutmut-1.5.0

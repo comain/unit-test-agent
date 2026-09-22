@@ -7,6 +7,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
+from uta.language.java.enforcement_versions import (
+    PARENT_ROOT_VERSION,
+    TEST_ENFORCER_VERSION,
+    PARENT_GENERIC_VERSION,
+)
+
 
 @dataclass(frozen=True)
 class MavenToolingStatus:
@@ -16,6 +22,7 @@ class MavenToolingStatus:
     reason: str
     artifact_id: str = ""
     version: str = ""
+    required_version: str = ""
 
 
 RunMavenCommand = Callable[[List[str], Path], object]
@@ -28,7 +35,7 @@ def test_enforcement_tooling_status(
     run_maven_command: Optional[RunMavenCommand] = None,
     profile_source_cmd: Optional[Sequence[str]] = None,
 ) -> MavenToolingStatus:
-    """Check if Maven resolves the Java test-enforcer plugin."""
+    """Check if Maven resolves the UTA test-enforcer plugin."""
 
     repo = Path(repo_path)
     if run_maven_command is not None:
@@ -38,9 +45,31 @@ def test_enforcement_tooling_status(
             run_maven_command=run_maven_command,
             profile_source_cmd=profile_source_cmd,
         )
-        if status is not None:
-            return status
+        # Raw POMs cannot establish profile activation or inherited overrides.
+        # A failed resolver must never silently authorize an enforcement run.
+        return status or MavenToolingStatus(
+            available=False,
+            reason="Unable to resolve Maven effective POM; active test-enforcer version is unverified",
+        )
     return _raw_pom_tooling_status(repo)
+
+
+def declared_test_enforcement_tooling_status(repo_path: Path) -> MavenToolingStatus:
+    """Inspect declared POM versions without resolving the Maven reactor."""
+
+    return _raw_pom_tooling_status(Path(repo_path))
+
+
+def has_declared_tooling_version_mismatch(status: MavenToolingStatus) -> bool:
+    """Return true only for an explicit, comparable version below the rollout floor."""
+
+    return bool(
+        not status.available
+        and status.artifact_id
+        and status.version
+        and status.required_version
+        and "below" in status.reason.lower()
+    )
 
 
 def _effective_pom_tooling_status(
@@ -56,12 +85,10 @@ def _effective_pom_tooling_status(
             maven_bin,
             "-q",
             "help:effective-pom",
-            "-DskipTests",
-            "-Dmaven.test.skip=true",
-            f"-Doutput={output}",
         ]
         cmd.extend(_maven_context_args(profile_source_cmd or ()))
         cmd = with_default_profile_args(cmd, repo)
+        cmd.append(f"-Doutput={output}")
         try:
             completed = run_maven_command(cmd, repo)
         except Exception:
@@ -71,17 +98,19 @@ def _effective_pom_tooling_status(
         root = _parse_xml(output)
         if root is None:
             return None
-        return _tooling_status_from_roots([root])
+        project_roots = _project_roots(root)
+        if not project_roots:
+            return None
+        return _tooling_status_from_roots(project_roots)
 
 
 def _raw_pom_tooling_status(repo: Path) -> MavenToolingStatus:
     roots: List[ET.Element] = []
-    candidates: List[MavenToolingStatus] = []
     for pom in _pom_files(repo):
         root = _parse_xml(pom)
         if root is None:
             continue
-        roots.append(root)
+        roots.extend(_project_roots(root))
     if roots:
         return _tooling_status_from_roots(roots)
     return MavenToolingStatus(
@@ -91,24 +120,25 @@ def _raw_pom_tooling_status(repo: Path) -> MavenToolingStatus:
 
 
 def _tooling_status_from_roots(roots: Sequence[ET.Element]) -> MavenToolingStatus:
-    properties = _collect_properties(roots)
     plugin_candidates: List[MavenToolingStatus] = []
     parent_hints: List[MavenToolingStatus] = []
     for root in roots:
+        properties = _collect_properties([root])
         parent_hints.extend(_parent_hints(root, properties))
         plugin_candidates.extend(_plugin_statuses(root, properties))
-    passing = [item for item in plugin_candidates if item.available]
-    if passing:
-        return passing[0]
+    # Every active plugin must meet the floor. A modern root must not mask an
+    # old child, and one module's properties must not resolve another's version.
+    failing = [item for item in plugin_candidates if not item.available]
+    if plugin_candidates and not failing:
+        return plugin_candidates[0]
     if plugin_candidates:
-        candidate = plugin_candidates[0]
+        candidate = failing[0]
         return MavenToolingStatus(
             available=False,
             artifact_id=candidate.artifact_id,
             version=candidate.version,
-            reason=(
-                f"{candidate.artifact_id} {candidate.version or 'unknown'} is below the required version"
-            ),
+            required_version=candidate.required_version,
+            reason=candidate.reason,
         )
     if parent_hints:
         return parent_hints[0]
@@ -116,6 +146,21 @@ def _tooling_status_from_roots(roots: Sequence[ET.Element]) -> MavenToolingStatu
         available=False,
         reason="No resolved test-enforcer Maven plugin was found",
     )
+
+
+def _project_roots(root: ET.Element) -> List[ET.Element]:
+    """Return Maven project elements from single- or multi-module effective POM XML."""
+
+    tag = _strip_namespace(root.tag)
+    if tag == "project":
+        return [root]
+    if tag == "projects":
+        return [
+            child
+            for child in list(root)
+            if _strip_namespace(child.tag) == "project"
+        ]
+    return []
 
 
 def with_default_profile_args(cmd: Sequence[str], repo_path: Path) -> List[str]:
@@ -165,11 +210,11 @@ def _parent_hints(root: ET.Element, properties: Dict[str, str]) -> List[MavenToo
         return []
     artifact_id = _child_text(parent, "artifactId")
     version = _resolve_version(_child_text(parent, "version"), properties)
-    if artifact_id == "quality-parent":
-        minimum = "1.0.0"
+    if artifact_id == "example-parent-generic":
+        minimum = PARENT_GENERIC_VERSION
         return [_parent_hint(artifact_id, version, minimum)]
-    if artifact_id == "service-parent":
-        minimum = "1.0.0"
+    if artifact_id == "example-root":
+        minimum = PARENT_ROOT_VERSION
         return [_parent_hint(artifact_id, version, minimum)]
     return []
 
@@ -180,7 +225,13 @@ def _plugin_statuses(root: ET.Element, properties: Dict[str, str]) -> List[Maven
         artifact_id = _child_text(plugin, "artifactId")
         if artifact_id != "test-enforcer":
             continue
-        statuses.append(_status_for(artifact_id, _resolve_version(_child_text(plugin, "version"), properties), "1.0.12"))
+        statuses.append(
+            _status_for(
+                artifact_id,
+                _resolve_version(_child_text(plugin, "version"), properties),
+                TEST_ENFORCER_VERSION,
+            )
+        )
     return statuses
 
 
@@ -190,6 +241,7 @@ def _status_for(artifact_id: str, version: str, minimum: str) -> MavenToolingSta
         available=available,
         artifact_id=artifact_id,
         version=version,
+        required_version=minimum,
         reason=f"{artifact_id} {version or 'unknown'} {'meets' if available else 'is below'} required {minimum}",
     )
 
@@ -209,6 +261,7 @@ def _parent_hint(artifact_id: str, version: str, minimum: str) -> MavenToolingSt
         available=False,
         artifact_id=artifact_id,
         version=version,
+        required_version=minimum,
         reason=reason,
     )
 
@@ -260,6 +313,13 @@ def _maven_context_args(cmd: Sequence[str]) -> List[str]:
         "--settings",
         "-gs",
         "--global-settings",
+        "-f",
+        "--file",
+        "-pl",
+        "--projects",
+        "-rf",
+        "--resume-from",
+        "-D",
     }
     index = 0
     while index < len(cmd):
@@ -276,6 +336,13 @@ def _maven_context_args(cmd: Sequence[str]) -> List[str]:
             or item.startswith("--activate-profiles=")
             or item.startswith("--settings=")
             or item.startswith("--global-settings=")
+            or item.startswith("--file=")
+            or item.startswith("--projects=")
+            or item.startswith("--resume-from=")
+            or item.startswith("-pl")
+            or item.startswith("-rf")
+            or (item.startswith("-f") and item not in {"-fae", "-ff", "-fn"})
+            or item in {"-am", "--also-make", "-amd", "--also-make-dependents", "-N", "--non-recursive"}
         ):
             context.append(item)
         index += 1

@@ -1,6 +1,6 @@
 import json
 
-from uta.output.reporter import Reporter
+from uta.reporting import Reporter
 
 
 def test_build_report_contains_project_summary_and_per_file_metrics(tmp_path):
@@ -168,3 +168,35 @@ def test_python_report_uses_target_metadata_without_java_only_labels(tmp_path):
     assert metric["class_fqn"] == "pysymbol:jobs/forecast.py::forecast_for_store"
     assert report["project_summary"]["target_label"] == "Target"
     assert report["project_summary"]["generated_test_files"] == 1
+
+
+def test_build_report_includes_test_quality_summary(tmp_path):
+    reporter = Reporter(str(tmp_path))
+    results = {
+        "com.example.A": {
+            "status": "PASS",
+            "coverage": 80.0,
+            "tests_pass": True,
+            "mutation_score": 90.0,
+            "test_file_path": "src/test/java/com/example/ATest.java",
+            "testQuality": {
+                "warningCount": 2,
+                "topRuleIds": [{"ruleId": "java-weak-not-null", "count": 2}],
+            },
+        },
+        "com.example.B": {
+            "status": "PASS",
+            "coverage": 90.0,
+            "tests_pass": True,
+            "mutation_score": 95.0,
+            "test_file_path": "src/test/java/com/example/BTest.java",
+        },
+    }
+
+    report = reporter.build_report(results, {"total_candidates": 2})
+    by_fqn = {item["class_fqn"]: item for item in report["per_file_metrics"]}
+
+    assert by_fqn["com.example.A"]["test_quality_warning_count"] == 2
+    assert by_fqn["com.example.A"]["test_quality_top_rule"] == "java-weak-not-null"
+    assert by_fqn["com.example.B"]["test_quality_warning_count"] == 0
+    assert by_fqn["com.example.B"]["test_quality_top_rule"] is None

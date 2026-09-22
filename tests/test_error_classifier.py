@@ -1,17 +1,12 @@
-"""Tests for uta.compile.error_classifier (token_opt_phase2 strategy K)."""
+"""Tests for uta.language.java.compile.error_classifier (token_opt_phase2 strategy K)."""
 
-import pytest
-from uta.compile import (
-    CompileError,
+from uta.language.java.compile import (
     classify_compile_errors,
     error_delta,
     CATEGORY_MISSING_IMPORT,
     CATEGORY_UNRESOLVED_SYMBOL,
     CATEGORY_WRONG_TYPE,
-    CATEGORY_MOCKITO_API,
     CATEGORY_SYNTAX,
-    CATEGORY_DEPRECATED_API,
-    CATEGORY_OTHER,
 )
 
 
@@ -137,3 +132,53 @@ def test_classify_anylistof_is_mockito():
     # anyListOf match lands as unresolved_symbol (it is a cannot-find-symbol error)
     # but the symbol hint should be populated
     assert len(errors) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Severity: javac warnings share the `[line,col]` shape with errors.
+# Regression for CI task f51a849c, where `[WARNING] ... Unsafe is internal
+# proprietary API` on two test files was reported as a compile blocker on a
+# report whose Maven build had exited 0.
+# ---------------------------------------------------------------------------
+
+MVN_PROPRIETARY_API_WARNING = """
+[WARNING] /repo/wtrace-api/src/test/java/com/example/fd/trace/BinaryAnnotationTest.java:[11,15] Unsafe is internal proprietary API and may be removed in a future release
+"""
+
+JAVAC_UNPREFIXED_WARNING = """
+/repo/consumer-saveSpanToHbase/src/test/java/com/example/fd/trace/task/otel/VictoriaTracesStorageTest.java:[15,15] Unsafe is internal proprietary API and may be removed in a future release
+"""
+
+JAVAC_WARNING_COLON_FORM = """
+/repo/src/test/java/com/example/FooTest.java:42: warning: [deprecation] setFoo(int) in Bar has been deprecated
+"""
+
+
+def test_maven_warning_lines_are_not_compile_errors():
+    assert classify_compile_errors(MVN_PROPRIETARY_API_WARNING) == []
+
+
+def test_unprefixed_javac_warning_is_not_a_compile_error():
+    assert classify_compile_errors(JAVAC_UNPREFIXED_WARNING) == []
+
+
+def test_javac_warning_colon_form_is_not_a_compile_error():
+    assert classify_compile_errors(JAVAC_WARNING_COLON_FORM) == []
+
+
+def test_warnings_do_not_hide_real_errors_in_the_same_log():
+    errors = classify_compile_errors(
+        MVN_PROPRIETARY_API_WARNING + MVN_MISSING_IMPORT + JAVAC_UNPREFIXED_WARNING
+    )
+    assert len(errors) == 1
+    assert errors[0].category == CATEGORY_MISSING_IMPORT
+
+
+def test_maven_error_severity_wins_over_warning_message_text():
+    # A project compiling with -Werror legitimately reports deprecation as
+    # [ERROR]; Maven's own severity is authoritative.
+    errors = classify_compile_errors(
+        "[ERROR] /repo/src/test/java/com/example/FooTest.java:[7,3]"
+        " setFoo(int) in Bar has been deprecated\n"
+    )
+    assert len(errors) == 1

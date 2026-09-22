@@ -21,14 +21,14 @@ Thumbs.db
 
 # Project
 .uta_cache/
-.uta_runner/
 .uta_reports/
-.uta-local/
-.antigravitycli/
+.uta_runner/
+.mutmut-cache
 .claude/
+.antigravitycli/
+.antigravicli/
 .env
-.env.*
 repo.txt
 e2e_real_run.*
+.env.*
 *.log
-*.swp

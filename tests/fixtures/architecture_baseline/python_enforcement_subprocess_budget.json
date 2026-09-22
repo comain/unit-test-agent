@@ -1,0 +1,25 @@
+{
+  "direct_spawn_count": 11,
+  "direct_spawn_heads": [
+    "git",
+    "git",
+    "git",
+    "git",
+    "git",
+    "git",
+    "<interpreter> -m coverage",
+    "<interpreter> pytest_process.py",
+    "<interpreter> -m coverage",
+    "<interpreter> -c",
+    "<interpreter> -c"
+  ],
+  "evidence_command_count": 5,
+  "evidence_command_names": [
+    "coverage_erase",
+    "pytest_coverage_run",
+    "coverage_xml",
+    "mutmut_generate_metadata",
+    "mutmut_run_selected"
+  ],
+  "targets": 1
+}

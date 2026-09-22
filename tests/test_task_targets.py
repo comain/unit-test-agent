@@ -1,9 +1,9 @@
 import json
 
-from uta.ci_plugin.reporting import CiReportRenderer
+from uta.app.reporting import CiReportRenderer
 from uta.tasks.manager import TaskManager
 from uta.tasks.render import build_status_payload, html_for_payload
-from uta.tasks.targets import TargetIdentity, target_count, target_identity_from_row
+from uta.shared.targets import TargetIdentity, target_count, target_identity_from_row
 
 
 def test_target_identity_keeps_java_compatibility():
@@ -95,7 +95,7 @@ def test_create_task_targets_supports_python_progress_report_and_cost(tmp_path):
     assert payload["classes"][0]["target_display_name"] == "src/jobs/forecast.py::forecast_for_store"
     assert payload["classes"][0]["input_tokens"] == 100
     assert payload["task"]["input_tokens"] == 100
-    assert float(payload["task"]["actual_cost"]) > 0
+    assert payload["task"]["actual_cost"] is None
     html = html_for_payload(payload)
     assert "<h2>Targets</h2>" in html
     assert "<th>ID</th><th>Target</th>" in html
@@ -191,7 +191,7 @@ def test_python_estimates_do_not_reuse_java_history(tmp_path):
     python_task_id = manager.create_task_targets(repo_path=str(repo), targets=[target])
     estimate = json.loads(manager.get_task(python_task_id)["estimate_snapshot_json"])
 
-    assert estimate["estimate_source"] == "fallback_default"
+    assert estimate["estimate_source"] == "unavailable"
     assert estimate["estimate_language"] == "python"
     assert estimate["target_count"] == 1
 
@@ -213,7 +213,7 @@ def test_ci_repair_progress_uses_target_display_for_python_tasks(tmp_path):
     html = CiReportRenderer().repair_progress_html(
         {
             "appName": "demo",
-            "taskId": "ci-1",
+            "taskId": "rdc-1",
             "branch": "feature/python",
             "session": {"sessionId": "fix-1", "repoTaskId": task_id, "status": "repair_task_created"},
             "repoTask": payload,
@@ -224,6 +224,35 @@ def test_ci_repair_progress_uses_target_display_for_python_tasks(tmp_path):
     assert "目标任务" in html
     assert "<th>Target</th>" in html
     assert "src/jobs/forecast.py" in html
+
+
+def test_ci_repair_progress_explains_green_refresh_without_repo_task():
+    html = CiReportRenderer().repair_progress_html(
+        {
+            "appName": "java-app",
+            "taskId": "task-stale",
+            "branch": "feature/TASK-82767",
+            "session": {
+                "sessionId": "fix-green",
+                "status": "green",
+                "alreadyGreenAfterRefresh": True,
+                "refreshRerunEnforcement": {
+                    "passed": True,
+                    "summary": "UTA test-enforcement passed after branch refresh",
+                    "command": ["mvn", "verify"],
+                    "stdout": "Diff coverage: 100%\nPIT generated=1 killed=1 survived=0 test-strength=100%",
+                    "stderr": "",
+                },
+            },
+            "repoTask": None,
+            "stages": [],
+        }
+    )
+
+    assert "刷新分支后重新执行门禁已通过，无需创建修复任务。" in html
+    assert "修复任务还未创建或 repoTask 不可用" not in html
+    assert "刷新后门禁确认" in html
+    assert "UTA test-enforcement passed after branch refresh" in html
 
 
 def test_create_task_still_backfills_java_target_columns(tmp_path):

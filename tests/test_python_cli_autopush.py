@@ -1,6 +1,5 @@
-from pathlib import Path
 
-from uta.tasks.autopush import passed_result_targets_and_paths
+from uta.tasks.rdc_delivery import passed_result_targets_and_paths
 
 
 def test_passed_result_autopush_selection_scopes_to_passed_targets(tmp_path):

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from uta.cli import main
+from uta.app.cli import main
 from uta.tasks.manager import TaskManager
 
 
@@ -256,20 +256,20 @@ def test_scan_python_defaults_to_git_history_ranking(monkeypatch, tmp_path):
     runner = CliRunner()
     calls = {}
 
-    def fake_changed(repo_path, days=30, module=None):
-        calls["changed"] = (repo_path, days, module)
+    def fake_changed(language, repo_path, days=30, module=None):
+        calls["changed"] = (language, repo_path, days, module)
         return [("jobs/forecast.py", 3)]
 
     def fail_all(*args, **kwargs):
         raise AssertionError("--all scanner should not be used")
 
-    monkeypatch.setattr("uta.engine.source_selection.get_changed_python_files", fake_changed)
-    monkeypatch.setattr("uta.engine.source_selection.get_all_python_files", fail_all)
+    monkeypatch.setattr("uta.testgen.source_selection.get_changed_source_files", fake_changed)
+    monkeypatch.setattr("uta.testgen.source_selection.get_all_source_files", fail_all)
 
     scan = runner.invoke(main, ["scan", "--repo", str(repo), "--language", "python", "--days", "7"])
 
     assert scan.exit_code == 0, scan.output
-    assert calls["changed"] == (str(repo), 7, None)
+    assert calls["changed"] == ("python", str(repo), 7, None)
     assert "jobs/forecast.py" in scan.output
     assert "3" in scan.output
 

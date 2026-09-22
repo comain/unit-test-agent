@@ -1,6 +1,5 @@
 """E2E Phase 2: Reliability — transient retry, quarantine, and unblock."""
 import pytest
-from pathlib import Path
 from unittest.mock import patch
 
 
@@ -56,7 +55,7 @@ class TestQuarantine:
         tid = _create_repo_task(mgr, tmp_path)
         mgr.start_task(tid)
 
-        with patch("uta.config.settings") as mock_settings:
+        with patch("uta.shared.config.settings") as mock_settings:
             mock_settings.quarantine_threshold = 2
 
             mgr.mark_failed(tid, "first failure")

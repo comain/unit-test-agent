@@ -1,11 +1,10 @@
-"""Tests for uta.learning.summary — L3 project rollup and L4 regression detection."""
+"""Tests for uta.testgen.learning.summary — L3 project rollup and L4 regression detection."""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
-from uta.learning.summary import build_project_summary, load_project_summary, check_phase_regression
+from uta.testgen.learning.summary import build_project_summary, load_project_summary, check_phase_regression
 
 
 @pytest.fixture
@@ -32,7 +31,7 @@ def test_build_creates_summary_file(repo):
     _write_jsonl(repo, "com.example.Foo", [
         {"kind": "resolved_symbol", "short_name": "OrderService", "fqns": ["com.example.OrderService"]},
     ])
-    summary = build_project_summary(repo)
+    build_project_summary(repo)
     summary_path = Path(repo) / ".uta_cache" / "learning" / "project_summary.json"
     assert summary_path.exists()
     loaded = json.loads(summary_path.read_text())

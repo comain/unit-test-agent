@@ -1,6 +1,6 @@
 import os
 import socket
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from uta.tasks.db import TaskDB
 from uta.tasks.manager import config_hash
@@ -31,15 +31,23 @@ class TaskScheduler:
             loaded_config_hash=loaded_config_hash,
         )
 
-    def acquire_next(self, *, allow_same_repo_concurrency: bool = False, include_failed: bool = False):
+    def acquire_next(
+        self,
+        *,
+        allow_same_repo_concurrency: bool = False,
+        include_failed: bool = False,
+        record_idle_heartbeat: bool = True,
+        exclude_task_ids: Optional[Iterable[int]] = None,
+    ):
         task = self.db.acquire_next_task(
             allow_same_repo_concurrency=allow_same_repo_concurrency,
             include_failed=include_failed,
+            exclude_task_ids=exclude_task_ids,
         )
         if task:
             self.db.add_event(task["id"], None, "scheduler_selected", f"Acquired by {self.runner_id}", stage="acquired")
             self.heartbeat(repo_task_id=task["id"], status="RUNNING", message="task acquired")
-        else:
+        elif record_idle_heartbeat:
             # Idle state is recorded in runner_heartbeats only — not task_events.
             self.heartbeat(repo_task_id=None, status="IDLE", message="no queued task")
         return task

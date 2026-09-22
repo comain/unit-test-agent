@@ -20,7 +20,11 @@ def test_python_fixture_repos_are_small_and_open_code_free():
     assert (py2_repo / "legacy_job.py").is_file()
     assert (py2_repo / "tests" / "test_legacy_job.py").is_file()
 
-    all_text = "\n".join(path.read_text(encoding="utf-8") for path in FIXTURE_ROOT.rglob("*") if path.is_file())
+    all_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in FIXTURE_ROOT.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".txt", ".toml", ".cfg", ".ini"}
+    )
     assert "OpenCode" not in all_text
     assert "opencode" not in all_text
     assert "print 'legacy fixture ready'" in (py2_repo / "legacy_job.py").read_text(encoding="utf-8")
@@ -83,7 +87,7 @@ def test_phase0_inventory_maps_java_shaped_surfaces_to_later_phases():
         "bin/uta-query-index",
         "scripts/enqueue.sh",
         "scripts/start_daemon.sh",
-        "scripts/start_ci_plugin.sh",
+        "scripts/start_api_trigger.sh",
         "scripts/deploy_single_host.sh",
         "scripts/setup-fetchcode.py",
         "ci plugin enforcement/report/repair",

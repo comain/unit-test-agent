@@ -64,7 +64,7 @@ def test_phase9_python3_stages_1_2_3_record_results(tmp_path):
     assert stage3.status == "passed"
     assert stage3.details["task_status"] == "COMPLETED"
     assert stage3.details["target_status"] == "PASS"
-    assert stage3.details["generated_test_path"].startswith("tests/uta_generated/")
+    assert stage3.details["generated_test_path"] == "tests/test_forecast.py"
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert [item["stage"] for item in report["records"]] == [1, 2, 3]
@@ -166,14 +166,17 @@ def test_phase9_stage5_python_ci_trigger_repair_and_rerun(tmp_path):
     config = _lane("python3").replace(repo_path=repo, target="jobs/forecast.py::forecast_for_store")
     runner = E2EStageRunner(results_dir=tmp_path / "results")
 
-    stage5 = runner.run_stage5_ci_plugin_repair(config)
+    stage5 = runner.run_stage5_api_trigger_repair(config)
 
     assert stage5.status == "passed"
     assert stage5.details["initial_status"] == "failed"
     assert stage5.details["repair_task_language"] == "python"
     assert stage5.details["repair_quality_gate_backend"] == "python_enforcer"
+    assert stage5.details["repair_changed_lines"]["jobs/forecast.py"]
     assert stage5.details["rerun_status"] == "success"
-    assert stage5.details["runner_calls"] == 2
+    # Completed repair evidence is now sufficient; no synthetic enforcement rerun is needed.
+    assert stage5.details["runner_calls"] == 1
+    assert stage5.details["session_status"] == "green"
 
 
 def test_phase9_real_python3_stages_1_2_when_configured(tmp_path):

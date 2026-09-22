@@ -1,0 +1,261 @@
+{
+  "artifact_keys": [
+    "import_compat",
+    "mutation_batch_count",
+    "mutation_generation_strategy",
+    "mutation_scope",
+    "mutmut_generation_policy"
+  ],
+  "backend": "python_enforcer",
+  "changedLines": {
+    "jobs/forecast.py": [
+      3
+    ]
+  },
+  "changedProductionFiles": [
+    "jobs/forecast.py"
+  ],
+  "command_count": 5,
+  "command_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "command_names": [
+    "coverage_erase",
+    "pytest_coverage_run",
+    "coverage_xml",
+    "mutmut_generate_metadata",
+    "mutmut_run_selected"
+  ],
+  "coverage": {
+    "covered": 1,
+    "gate": 95.0,
+    "modules": 1,
+    "no_executable_changed_lines": false,
+    "passed": true,
+    "rate": 100.0,
+    "scope": "changed_lines",
+    "total": 1
+  },
+  "language": "python",
+  "mutation": {
+    "candidatePlan": {
+      "activeSelected": [
+        {
+          "candidateId": "<sha256>",
+          "opportunity": {
+            "covered": true,
+            "diffHunk": "@@ 3 @@\nreturn value * 3",
+            "executable": true,
+            "familyHint": "math",
+            "language": "python",
+            "line": 3,
+            "lineSpan": [
+              3,
+              3
+            ],
+            "operatorName": "math_operator",
+            "operatorPriority": 90,
+            "opportunityId": "<sha256>",
+            "roiScore": 90.0,
+            "selectionRank": [
+              0,
+              -90,
+              "jobs/forecast.py",
+              3,
+              "run",
+              "math_operator",
+              "<sha256>"
+            ],
+            "selectionReason": "covered changed line",
+            "sourcePath": "jobs/forecast.py",
+            "symbol": "run"
+          },
+          "score": 90.0,
+          "toolCandidateKey": "jobs.forecast.x_run__mutmut_1"
+        }
+      ],
+      "adapterFilteredGenerationApplied": true,
+      "eligibleMutationOpportunities": [
+        {
+          "covered": true,
+          "diffHunk": "@@ 3 @@\nreturn value * 3",
+          "executable": true,
+          "familyHint": "math",
+          "language": "python",
+          "line": 3,
+          "lineSpan": [
+            3,
+            3
+          ],
+          "operatorName": "math_operator",
+          "operatorPriority": 90,
+          "opportunityId": "<sha256>",
+          "roiScore": 90.0,
+          "selectionRank": [
+            0,
+            -90,
+            "jobs/forecast.py",
+            3,
+            "run",
+            "math_operator",
+            "<sha256>"
+          ],
+          "selectionReason": "covered changed line",
+          "sourcePath": "jobs/forecast.py",
+          "symbol": "run"
+        },
+        {
+          "covered": true,
+          "diffHunk": "@@ 3 @@\nreturn value * 3",
+          "executable": true,
+          "familyHint": "literal",
+          "language": "python",
+          "line": 3,
+          "lineSpan": [
+            3,
+            3
+          ],
+          "operatorName": "constant_value",
+          "operatorPriority": 80,
+          "opportunityId": "<sha256>",
+          "roiScore": 80.0,
+          "selectionRank": [
+            0,
+            -80,
+            "jobs/forecast.py",
+            3,
+            "run",
+            "constant_value",
+            "<sha256>"
+          ],
+          "selectionReason": "covered changed line",
+          "sourcePath": "jobs/forecast.py",
+          "symbol": "run"
+        }
+      ],
+      "exactToolCandidateKeys": [
+        "jobs.forecast.x_run__mutmut_1"
+      ],
+      "filterMechanism": "mutmut3_metadata_selected_execution",
+      "filterMechanisms": [
+        "mutmut3_metadata_selected_execution"
+      ],
+      "generationPolicy": {
+        "changedLineCount": 1,
+        "eligibleOpportunities": 2,
+        "omittedByHardCap": 0,
+        "omittedByOnePerLine": 0,
+        "selectedOpportunities": 1,
+        "selectedOpportunitiesBeforeCap": 1,
+        "suppressedOpportunities": 0,
+        "truncated": false
+      },
+      "reportFullSelected": [
+        {
+          "candidateId": "<sha256>",
+          "opportunity": {
+            "covered": true,
+            "diffHunk": "@@ 3 @@\nreturn value * 3",
+            "executable": true,
+            "familyHint": "math",
+            "language": "python",
+            "line": 3,
+            "lineSpan": [
+              3,
+              3
+            ],
+            "operatorName": "math_operator",
+            "operatorPriority": 90,
+            "opportunityId": "<sha256>",
+            "roiScore": 90.0,
+            "selectionRank": [
+              0,
+              -90,
+              "jobs/forecast.py",
+              3,
+              "run",
+              "math_operator",
+              "<sha256>"
+            ],
+            "selectionReason": "covered changed line",
+            "sourcePath": "jobs/forecast.py",
+            "symbol": "run"
+          },
+          "score": 90.0,
+          "toolCandidateKey": "jobs.forecast.x_run__mutmut_1"
+        }
+      ],
+      "sampled": false,
+      "samplingLayer": {
+        "enabled": false
+      },
+      "suppressed": [],
+      "suppressionByReason": {}
+    },
+    "changedLineMutantsGenerated": 1,
+    "changedLineMutantsKilled": "N",
+    "changedLineMutantsScored": "N",
+    "gate": 95.0,
+    "generated": 1,
+    "killed": "N",
+    "modules": 1,
+    "noTests": 0,
+    "notChecked": 0,
+    "passed": true,
+    "rate": 100.0,
+    "reasonCode": null,
+    "scope": "changed_lines",
+    "survived": 0,
+    "suspicious": 0,
+    "timeout": 0
+  },
+  "passed": true,
+  "reasonCode": "passed",
+  "schemaVersion": 1,
+  "setup": {
+    "coreVersion": "lightweight-1.0.2",
+    "tool": "lightweight_tool"
+  },
+  "status": "passed",
+  "summary": "Python enforcement passed",
+  "targets": [
+    {
+      "display_name": "jobs/forecast.py",
+      "granularity": "file",
+      "language": "python",
+      "source_path": "jobs/forecast.py",
+      "target_id": "pyfile:jobs/forecast.py"
+    }
+  ],
+  "top_level_keys": [
+    "artifacts",
+    "backend",
+    "baseCommit",
+    "baseRef",
+    "changedLines",
+    "changedProductionFiles",
+    "commands",
+    "coverage",
+    "enforcementCoreVersion",
+    "evidenceId",
+    "generatedAt",
+    "headCommit",
+    "headRef",
+    "language",
+    "mutation",
+    "passed",
+    "reasonCode",
+    "repo",
+    "schemaVersion",
+    "setup",
+    "status",
+    "summary",
+    "targetResults",
+    "targets",
+    "utaVersion"
+  ]
+}

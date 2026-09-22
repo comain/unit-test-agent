@@ -1,4 +1,3 @@
-import pytest
 import os
 from uta.language.java.parse.java_parser import JavaParser
 from uta.language.java.parse.graph_builder import GraphBuilder

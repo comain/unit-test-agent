@@ -1,0 +1,252 @@
+{
+  "backend_language_attribute": {
+    "java": "java",
+    "python": "python"
+  },
+  "backend_phase_support": {
+    "java": {
+      "complete_generation": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "delegated_quality_gate": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "delegated_quality_gate_verify": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "fix_compile": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "fix_coverage": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "fix_mutation": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "fix_tests": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "generate_tests": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "measure_coverage": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "measure_mutation": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "plan_tests": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "precheck_existing_tests": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "verify_compile": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "verify_tests": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      }
+    },
+    "python": {
+      "complete_generation": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "delegated_quality_gate": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "delegated_quality_gate_verify": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "fix_compile": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "fix_coverage": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "fix_mutation": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "fix_tests": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "generate_tests": {
+        "interpret": "supported",
+        "render_prompt": "supported"
+      },
+      "measure_coverage": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "measure_mutation": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "plan_tests": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "precheck_existing_tests": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "verify_compile": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      },
+      "verify_tests": {
+        "interpret": "unsupported",
+        "render_prompt": "unsupported"
+      }
+    }
+  },
+  "entry_node": "precheck_existing_tests_reconcile",
+  "node_count": 79,
+  "nodes_by_phase": {
+    "complete_generation": [
+      "complete_generation_reconcile:reconcile_generation_operation",
+      "complete_generation_run:generation_operation",
+      "complete_generation_rehydrate:rehydrate_generation_operation",
+      "pause_generation:pause_generation",
+      "terminate_generation:terminate_generation"
+    ],
+    "delegated_quality_gate": [
+      "delegated_quality_gate_verify_reconcile:reconcile_generation_operation",
+      "delegated_quality_gate_verify_run:generation_operation",
+      "delegated_quality_gate_verify_rehydrate:rehydrate_generation_operation",
+      "delegated_quality_gate_turn_reconcile:reconcile_generation_operation",
+      "delegated_quality_gate_prompt:generation_prompt",
+      "delegated_quality_gate_turn:agent_turn",
+      "delegated_quality_gate_turn_rehydrate:rehydrate_generation_operation",
+      "delegated_quality_gate_interpret_reconcile:reconcile_generation_operation",
+      "delegated_quality_gate_interpret:generation_interpret",
+      "delegated_quality_gate_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "fix_compile": [
+      "fix_compile_turn_reconcile:reconcile_generation_operation",
+      "fix_compile_prompt:generation_prompt",
+      "fix_compile_turn:agent_turn",
+      "fix_compile_turn_rehydrate:rehydrate_generation_operation",
+      "fix_compile_interpret_reconcile:reconcile_generation_operation",
+      "fix_compile_interpret:generation_interpret",
+      "fix_compile_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "fix_coverage": [
+      "fix_coverage_turn_reconcile:reconcile_generation_operation",
+      "fix_coverage_prompt:generation_prompt",
+      "fix_coverage_turn:agent_turn",
+      "fix_coverage_turn_rehydrate:rehydrate_generation_operation",
+      "fix_coverage_interpret_reconcile:reconcile_generation_operation",
+      "fix_coverage_interpret:generation_interpret",
+      "fix_coverage_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "fix_mutation": [
+      "fix_mutation_turn_reconcile:reconcile_generation_operation",
+      "fix_mutation_prompt:generation_prompt",
+      "fix_mutation_turn:agent_turn",
+      "fix_mutation_turn_rehydrate:rehydrate_generation_operation",
+      "fix_mutation_interpret_reconcile:reconcile_generation_operation",
+      "fix_mutation_interpret:generation_interpret",
+      "fix_mutation_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "fix_tests": [
+      "fix_tests_turn_reconcile:reconcile_generation_operation",
+      "fix_tests_prompt:generation_prompt",
+      "fix_tests_turn:agent_turn",
+      "fix_tests_turn_rehydrate:rehydrate_generation_operation",
+      "fix_tests_interpret_reconcile:reconcile_generation_operation",
+      "fix_tests_interpret:generation_interpret",
+      "fix_tests_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "generate_tests": [
+      "generate_tests_turn_reconcile:reconcile_generation_operation",
+      "generate_tests_prompt:generation_prompt",
+      "generate_tests_turn:agent_turn",
+      "generate_tests_turn_rehydrate:rehydrate_generation_operation",
+      "generate_tests_interpret_reconcile:reconcile_generation_operation",
+      "generate_tests_interpret:generation_interpret",
+      "generate_tests_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "measure_coverage": [
+      "measure_coverage_reconcile:reconcile_generation_operation",
+      "measure_coverage_run:generation_operation",
+      "measure_coverage_rehydrate:rehydrate_generation_operation"
+    ],
+    "measure_mutation": [
+      "measure_mutation_reconcile:reconcile_generation_operation",
+      "measure_mutation_run:generation_operation",
+      "measure_mutation_rehydrate:rehydrate_generation_operation"
+    ],
+    "plan_tests": [
+      "plan_tests_turn_reconcile:reconcile_generation_operation",
+      "plan_tests_prompt:generation_prompt",
+      "plan_tests_turn:agent_turn",
+      "plan_tests_turn_rehydrate:rehydrate_generation_operation",
+      "plan_tests_interpret_reconcile:reconcile_generation_operation",
+      "plan_tests_interpret:generation_interpret",
+      "plan_tests_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "precheck_existing_tests": [
+      "precheck_existing_tests_reconcile:reconcile_generation_operation",
+      "precheck_existing_tests_run:generation_operation",
+      "precheck_existing_tests_rehydrate:rehydrate_generation_operation"
+    ],
+    "review_equivalent_mutants": [
+      "review_equivalent_mutants_turn_reconcile:reconcile_generation_operation",
+      "review_equivalent_mutants_prompt:generation_prompt",
+      "review_equivalent_mutants_turn:agent_turn",
+      "review_equivalent_mutants_turn_rehydrate:rehydrate_generation_operation",
+      "review_equivalent_mutants_interpret_reconcile:reconcile_generation_operation",
+      "review_equivalent_mutants_interpret:generation_interpret",
+      "review_equivalent_mutants_result_rehydrate:rehydrate_generation_operation"
+    ],
+    "verify_compile": [
+      "verify_compile_reconcile:reconcile_generation_operation",
+      "verify_compile_run:generation_operation",
+      "verify_compile_rehydrate:rehydrate_generation_operation"
+    ],
+    "verify_tests": [
+      "verify_tests_reconcile:reconcile_generation_operation",
+      "verify_tests_run:generation_operation",
+      "verify_tests_rehydrate:rehydrate_generation_operation"
+    ]
+  },
+  "ordered_operator_phases": [
+    "precheck_existing_tests",
+    "plan_tests",
+    "generate_tests",
+    "verify_compile",
+    "fix_compile",
+    "verify_tests",
+    "fix_tests",
+    "measure_coverage",
+    "fix_coverage",
+    "measure_mutation",
+    "fix_mutation",
+    "delegated_quality_gate",
+    "review_equivalent_mutants",
+    "complete_generation"
+  ],
+  "spec_name": "test-generation-cycle"
+}

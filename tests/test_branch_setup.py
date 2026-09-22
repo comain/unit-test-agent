@@ -1,12 +1,47 @@
-from pathlib import Path
 
-from uta.graph.nodes import (
-    _allowed_llm_path,
+from uta.testgen.workspace_guard import (
+    allowed_llm_path as _allowed_llm_path,
+    extra_authored_test_paths as _extra_authored_test_paths,
+    verify_task_branch_and_preexisting_diff as _verify_task_branch_and_preexisting_diff,
+)
+from uta.testgen.workspace_setup import (
     _clean_rerun_artifacts,
-    _module_from_source_path,
-    _verify_task_branch_and_preexisting_diff,
     setup_branch,
 )
+from uta.language.java.workspace import module_from_source_path as _module_from_source_path
+
+
+def test_extra_authored_test_paths_includes_base_class_excludes_residue_and_production():
+    current_dirty = [
+        # Base/helper test the repair authored this run (not a target's primary path).
+        "src/test/java/com/example/BaseSupportTest.java",
+        # Already queued for commit as a target's primary test path.
+        "src/test/java/com/example/DemoTest.java",
+        # Pre-existing residue from a reused workspace — must NOT be committed.
+        "src/test/java/com/example/StaleResidueTest.java",
+        # Production edit — never a test file.
+        "src/main/java/com/example/Demo.java",
+        # UTA runtime artifact.
+        ".uta_cache/context/Demo.context.md",
+    ]
+    run_initial_dirty = ["src/test/java/com/example/StaleResidueTest.java"]
+    existing_commit_paths = ["src/test/java/com/example/DemoTest.java"]
+
+    extra = _extra_authored_test_paths(current_dirty, run_initial_dirty, existing_commit_paths)
+
+    assert extra == ["src/test/java/com/example/BaseSupportTest.java"]
+
+
+def test_extra_authored_test_paths_empty_when_nothing_new_authored():
+    assert _extra_authored_test_paths([], [], []) == []
+    assert (
+        _extra_authored_test_paths(
+            ["src/test/java/com/example/DemoTest.java"],
+            [],
+            ["src/test/java/com/example/DemoTest.java"],
+        )
+        == []
+    )
 
 
 def test_clean_rerun_artifacts_preserves_cache_reports_and_summary_but_removes_other_untracked_artifacts(tmp_path, monkeypatch):
@@ -29,14 +64,14 @@ def test_clean_rerun_artifacts_preserves_cache_reports_and_summary_but_removes_o
     opencode_config = repo / "opencode.json"
     opencode_config.write_text("{}", encoding="utf-8")
 
-    def fake_run(cmd, capture_output=True, check=False, cwd=None, **kwargs):
+    def fake_run(repo_path, *args, **kwargs):
         class R:
             returncode = 0
             stdout = b"biz/src/test/java/FooTest.java\nprovider/src/test/java/com/example/Unexpected.java\n.uta_summary.md\nopencode.json\n.uta_cache/context/keep.md\n.uta_reports/summary.json\n"
             stderr = b""
         return R()
 
-    monkeypatch.setattr("uta.graph.nodes.subprocess.run", fake_run)
+    monkeypatch.setattr("uta.testgen.workspace_setup._git_run", fake_run)
     _clean_rerun_artifacts(str(repo))
 
     assert cache_file.exists()
@@ -52,20 +87,21 @@ def test_setup_branch_recreates_branch_from_default(monkeypatch, tmp_path):
     repo.mkdir()
     calls = []
 
-    def fake_run(cmd, capture_output=True, check=False, cwd=None, **kwargs):
-        calls.append((cmd, cwd))
+    def fake_run(repo_path, *args, **kwargs):
+        cmd = ["git", *args]
+        calls.append((cmd, repo_path))
 
         class R:
             returncode = 0
             stdout = b""
             stderr = b""
 
-        if cmd[:4] == ["git", "rev-parse", "--verify", "origin/master"] and cwd == str(repo):
+        if cmd[:4] == ["git", "rev-parse", "--verify", "origin/master"] and repo_path == str(repo):
             return R()
         return R()
 
-    monkeypatch.setattr("uta.graph.nodes.subprocess.run", fake_run)
-    monkeypatch.setattr("uta.graph.nodes._clean_rerun_artifacts", lambda repo_path: calls.append((["clean", repo_path], None)))
+    monkeypatch.setattr("uta.testgen.workspace_setup._git_run", fake_run)
+    monkeypatch.setattr("uta.testgen.workspace_setup._clean_rerun_artifacts", lambda repo_path: calls.append((["clean", repo_path], None)))
 
     out = setup_branch({"repo_path": str(repo), "branch_name": "unit-code-gen"})
 
@@ -81,20 +117,21 @@ def test_setup_branch_reuses_existing_branch_without_reset_or_clean(monkeypatch,
     repo.mkdir()
     calls = []
 
-    def fake_run(cmd, capture_output=True, check=False, cwd=None, **kwargs):
-        calls.append((cmd, cwd))
+    def fake_run(repo_path, *args, **kwargs):
+        cmd = ["git", *args]
+        calls.append((cmd, repo_path))
 
         class R:
             returncode = 0
             stdout = b""
             stderr = b""
 
-        if cmd[:3] == ["git", "branch", "--show-current"] and cwd == str(repo):
+        if cmd[:3] == ["git", "branch", "--show-current"] and repo_path == str(repo):
             R.stdout = b"feature/calibration\n"
         return R()
 
-    monkeypatch.setattr("uta.graph.nodes.subprocess.run", fake_run)
-    monkeypatch.setattr("uta.graph.nodes._clean_rerun_artifacts", lambda repo_path: calls.append((["clean", repo_path], None)))
+    monkeypatch.setattr("uta.testgen.workspace_setup._git_run", fake_run)
+    monkeypatch.setattr("uta.testgen.workspace_setup._clean_rerun_artifacts", lambda repo_path: calls.append((["clean", repo_path], None)))
 
     out = setup_branch(
         {
@@ -115,20 +152,21 @@ def test_setup_branch_checkouts_existing_branch_without_force(monkeypatch, tmp_p
     repo.mkdir()
     calls = []
 
-    def fake_run(cmd, capture_output=True, check=False, cwd=None, **kwargs):
-        calls.append((cmd, cwd))
+    def fake_run(repo_path, *args, **kwargs):
+        cmd = ["git", *args]
+        calls.append((cmd, repo_path))
 
         class R:
             returncode = 0
             stdout = b""
             stderr = b""
 
-        if cmd[:3] == ["git", "branch", "--show-current"] and cwd == str(repo):
+        if cmd[:3] == ["git", "branch", "--show-current"] and repo_path == str(repo):
             R.stdout = b"other\n"
         return R()
 
-    monkeypatch.setattr("uta.graph.nodes.subprocess.run", fake_run)
-    monkeypatch.setattr("uta.graph.nodes._clean_rerun_artifacts", lambda repo_path: calls.append((["clean", repo_path], None)))
+    monkeypatch.setattr("uta.testgen.workspace_setup._git_run", fake_run)
+    monkeypatch.setattr("uta.testgen.workspace_setup._clean_rerun_artifacts", lambda repo_path: calls.append((["clean", repo_path], None)))
 
     setup_branch(
         {
@@ -192,6 +230,57 @@ def test_llm_diff_guard_allows_module_scoped_test_path_when_module_is_all():
     )
     assert not _allowed_llm_path(
         "biz/src/main/java/com/example/biz/ActorDataLoader.java",
+        state,
+        [class_fqn],
+    )
+
+
+def test_ci_incremental_llm_diff_guard_allows_unrelated_java_tests_but_rejects_production_files():
+    class_fqn = "com.example.biz.ActorDataLoader"
+    state = {
+        "module": None,
+        "selected_classes": [class_fqn],
+        "quality_mode": "ci_incremental",
+        "quality_gate_backend": "maven_enforcer",
+    }
+
+    assert _allowed_llm_path(
+        "biz/src/test/java/com/example/biz/ActorDataLoaderTest.java",
+        state,
+        [class_fqn],
+    )
+    assert _allowed_llm_path(
+        "biz/src/test/java/com/example/biz/ReceiptFinishActorTest.java",
+        state,
+        [class_fqn],
+    )
+    assert not _allowed_llm_path(
+        "biz/src/main/java/com/example/biz/ActorDataLoader.java",
+        state,
+        [class_fqn],
+    )
+    assert _allowed_llm_path("pom.xml", state, [class_fqn])
+    assert _allowed_llm_path("biz/pom.xml", state, [class_fqn])
+
+
+def test_ci_incremental_llm_diff_guard_allows_enforcer_target_tests():
+    class_fqn = "com.example.biz.ActorDataLoader"
+    state = {
+        "module": None,
+        "selected_classes": [class_fqn],
+        "quality_mode": "ci_incremental",
+        "quality_gate_backend": "maven_enforcer",
+        "rdc_context": {
+            "enforcement": {
+                "evidence": {
+                    "targetTests": ["com.example.biz.ActorDataLoaderExistingTest"],
+                }
+            }
+        },
+    }
+
+    assert _allowed_llm_path(
+        "biz/src/test/java/com/example/biz/ActorDataLoaderExistingTest.java",
         state,
         [class_fqn],
     )

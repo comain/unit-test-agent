@@ -1,11 +1,10 @@
-"""Tests for uta.opencode.tiered_router (token_opt_phase2 strategy H)."""
+"""Tests for agent_core.harness.tiered_router (token_opt_phase2 strategy H)."""
 
-import pytest
 from unittest.mock import patch
 
 
 def test_parse_provider_chain_preserves_provider_and_model_order():
-    from uta.opencode.tiered_router import parse_provider_chain
+    from agent_core.harness.tiered_router import parse_provider_chain
 
     chain = parse_provider_chain(
         "token-pool:token-pool/gpt-5.5,token-pool/gpt-5.5-mini;"
@@ -23,7 +22,7 @@ def test_parse_provider_chain_preserves_provider_and_model_order():
 
 
 def test_parse_provider_chain_ignores_invalid_entries():
-    from uta.opencode.tiered_router import parse_provider_chain
+    from agent_core.harness.tiered_router import parse_provider_chain
 
     chain = parse_provider_chain(
         "missing-colon;openai:openai/gpt-5.5,,openai/gpt-5.4;"
@@ -38,7 +37,7 @@ def test_parse_provider_chain_ignores_invalid_entries():
 
 
 def test_provider_token_statuses_do_not_expose_token_values():
-    from uta.opencode.tiered_router import (
+    from agent_core.harness.tiered_router import (
         parse_provider_chain,
         parse_provider_tokens,
         provider_token_statuses,
@@ -63,7 +62,7 @@ def test_provider_token_statuses_do_not_expose_token_values():
 
 
 def test_parse_provider_base_urls_accepts_provider_scoped_entries():
-    from uta.opencode.tiered_router import parse_provider_base_urls
+    from agent_core.harness.tiered_router import parse_provider_base_urls
 
     urls = parse_provider_base_urls(
         "token-pool.base_url=https://token-pool.example/v1/;"
@@ -80,13 +79,13 @@ def test_parse_provider_base_urls_accepts_provider_scoped_entries():
 
 
 def test_provider_candidates_use_first_chain_model_when_fallback_disabled():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = (
             "token-pool:token-pool/gpt-5.5,token-pool/gpt-5.5-mini;"
             "openai:openai/gpt-5.5"
         )
         mock_settings.opencode_provider_fallback_enabled = False
-        from uta.opencode.tiered_router import provider_candidates
+        from agent_core.harness.tiered_router import provider_candidates
 
         candidates = provider_candidates()
 
@@ -96,12 +95,12 @@ def test_provider_candidates_use_first_chain_model_when_fallback_disabled():
 
 
 def test_provider_candidates_include_chain_when_fallback_enabled():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = (
             "token-pool:token-pool/gpt-5.5;openai:openai/gpt-5.5"
         )
         mock_settings.opencode_provider_fallback_enabled = True
-        from uta.opencode.tiered_router import provider_candidates
+        from agent_core.harness.tiered_router import provider_candidates
 
         candidates = provider_candidates()
 
@@ -112,44 +111,54 @@ def test_provider_candidates_include_chain_when_fallback_enabled():
 
 
 def test_cheap_model_override_is_ignored_for_compile_fix():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = "token-pool:token-pool/gpt-5.5"
         mock_settings.opencode_provider_fallback_enabled = False
         mock_settings.opencode_cheap_model = "ollama/qwen3:8b"
-        from uta.opencode.tiered_router import cheap_model_for_phase
+        from agent_core.harness.tiered_router import cheap_model_for_phase
 
         assert cheap_model_for_phase("compile_fix") is None
 
 
 def test_effective_model_uses_chain_for_compile_fix_even_when_cheap_model_set():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = "token-pool:token-pool/gpt-5.5"
         mock_settings.opencode_provider_fallback_enabled = False
         mock_settings.opencode_cheap_model = "ollama/qwen3:8b"
         mock_settings.opencode_model = "legacy/gpt-4o"
-        from uta.opencode.tiered_router import effective_model
+        from agent_core.harness.tiered_router import effective_model
 
         assert effective_model("compile_fix") == "token-pool/gpt-5.5"
 
 
 def test_effective_model_uses_chain_for_generation():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = "token-pool:token-pool/gpt-5.5"
         mock_settings.opencode_provider_fallback_enabled = False
         mock_settings.opencode_cheap_model = "ollama/qwen3:8b"
         mock_settings.opencode_model = "legacy/gpt-4o"
-        from uta.opencode.tiered_router import effective_model
+        from agent_core.harness.tiered_router import effective_model
+
+        assert effective_model("generate") == "token-pool/gpt-5.5"
+
+
+def test_effective_model_qualifies_bare_provider_chain_model():
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
+        mock_settings.opencode_provider_chain = "token-pool:gpt-5.5"
+        mock_settings.opencode_provider_fallback_enabled = False
+        mock_settings.opencode_model = "gpt-5.5"
+        from agent_core.harness.tiered_router import effective_model
 
         assert effective_model("generate") == "token-pool/gpt-5.5"
 
 
 def test_effective_model_uses_same_chain_model_for_all_phases():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = "token-pool:token-pool/gpt-5.5"
         mock_settings.opencode_provider_fallback_enabled = False
         mock_settings.opencode_cheap_model = "ollama/qwen3:8b"
         mock_settings.opencode_model = "legacy/gpt-4o"
-        from uta.opencode.tiered_router import effective_model
+        from agent_core.harness.tiered_router import effective_model
 
         assert effective_model("generate") == "token-pool/gpt-5.5"
         assert effective_model("compile_fix") == "token-pool/gpt-5.5"
@@ -158,12 +167,12 @@ def test_effective_model_uses_same_chain_model_for_all_phases():
 
 
 def test_effective_model_honors_task_selected_model_when_in_chain():
-    with patch("uta.opencode.tiered_router.settings") as mock_settings:
+    with patch("agent_core.harness.tiered_router.settings") as mock_settings:
         mock_settings.opencode_provider_chain = (
             "token-pool:token-pool/gpt-5.5;openai:openai/gpt-5.4"
         )
         mock_settings.opencode_provider_fallback_enabled = True
         mock_settings.opencode_model = "openai/gpt-5.4"
-        from uta.opencode.tiered_router import effective_model
+        from agent_core.harness.tiered_router import effective_model
 
         assert effective_model("generate") == "openai/gpt-5.4"

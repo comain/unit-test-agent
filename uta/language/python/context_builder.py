@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from uta.engine.targets import TargetRef
+from uta.shared.targets import TargetRef
 from uta.language.python.parse.parser import PythonParser
 
 
@@ -87,7 +87,7 @@ class PythonContextBuilder:
         return self.export_project_index(**kwargs)
 
     def export_project_index(self, *, output_dir: Optional[Path] = None, max_files: Optional[int] = None) -> Dict[str, Any]:
-        from uta.engine.parse import ParseProjectRequest, make_parse_provider
+        from uta.shared.parse import ParseProjectRequest, make_parse_provider
 
         parsed = make_parse_provider("python").parse_project(
             ParseProjectRequest(repo_path=self.repo_path, max_files=max_files)

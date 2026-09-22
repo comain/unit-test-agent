@@ -1,0 +1,47 @@
+A generated Python test file does not import, collect, or compile.
+Repair only the generated pytest file for the requested Python target.
+
+Stable rules:
+- Edit only the active verification test file: `{{ generated_test_path or test_file_path }}`.
+- Do not create a new `tests/uta_generated/` file unless that is the active verification test file.
+- Do not edit production Python files.
+- Do not write or modify verifier configuration or mutation runtime artifacts such as `pyproject.toml`, `setup.cfg`, `tox.ini`, `pytest.ini`, `mutants/`, `.mutmut-cache/`, or `.uta_cache/`; UTA owns verifier setup.
+- If the file has a UTA ownership header, keep it.
+- Prefer pytest, monkeypatch, tmp_path, and unittest.mock over real external I/O.
+- Do not inspect Python implementation internals such as `__code__`, `co_consts`, bytecode, source text, or mutmut trampoline/wrapper constants; mutmut may replace functions during stats collection, so these assertions are not stable tests.
+- Keep imports safe for legacy Python projects; avoid import-time side effects.
+- Import the target through the provided canonical module exactly. Do not invent alternate aliases or create a synthetic alias package such as `_uta_*`; mutmut must see tests execute the real mutated module.
+- If imports are stubbed through `sys.modules`, use dependency module names under the same package prefix as the canonical module. Example: for `src.app_shidiao`, stub `src.web_common`, not `web_common`.
+- Avoid brittle assertions on exact import-time logger names or module `__name__` values. During mutmut, wrappers may preserve behavior while changing import metadata; assert behavior and side effects instead.
+
+{# CACHE_BOUNDARY #}
+{%- if spec_context %}
+
+### SUPPLIED BEHAVIOR CONTEXT
+The following externally supplied behavior rules are authoritative:
+
+{{ spec_context }}
+{%- endif %}
+### TARGET
+- Target: `{{ display_name }}`
+- Target ID: `{{ target_id }}`
+- Source: `{{ source_path }}`
+- Canonical module: `{{ canonical_module }}`
+{% if symbol %}- Symbol: `{{ symbol }}`
+{% endif %}
+- Generated test path: `{{ generated_test_path or test_file_path }}`
+
+### CONTEXT
+- Target context: `{{ context_abs or target_context_abs }}`
+- Context JSON: `{{ context_json_abs }}`
+- Structured query: `{{ index_query_command }}`
+
+Read the generated test file and the context before broad repo searching.
+
+### ERRORS
+```
+{{ compile_errors }}
+```
+
+### REPAIR TASK
+Fix all pytest collection, syntax, import, and compatibility errors in the same generated test file.

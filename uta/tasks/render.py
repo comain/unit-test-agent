@@ -8,9 +8,10 @@ from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
 
+from uta.shared.config import settings
 from uta.tasks.db import TaskDB
 from uta.tasks.models import json_loads
-from uta.tasks.targets import display_target
+from uta.shared.targets import display_target
 
 
 def _row_to_dict(row) -> Dict[str, Any]:
@@ -22,10 +23,49 @@ def _is_java_task(task: Dict[str, Any], classes: list[Dict[str, Any]]) -> bool:
     return language == "java" and all((row.get("language") or "java") == "java" for row in classes)
 
 
-def build_status_payload(db: TaskDB, repo_task_id: int) -> Dict[str, Any]:
+def _test_quality_by_class_task_id(events: list[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
+    result: Dict[int, Dict[str, Any]] = {}
+    for event in events:
+        class_task_id = event.get("class_task_id")
+        if not class_task_id:
+            continue
+        payload = json_loads(event.get("payload_json"))
+        quality = payload.get("testQuality") if isinstance(payload, dict) else None
+        if not isinstance(quality, dict):
+            continue
+        warning_count = int(quality.get("warningCount") or len(quality.get("warnings") or []))
+        if warning_count > 0:
+            result.setdefault(int(class_task_id), quality)
+    return result
+
+
+def _compact_test_quality_warning(quality: Dict[str, Any]) -> str:
+    warnings = quality.get("warnings") if isinstance(quality, dict) else []
+    if not warnings:
+        count = int(quality.get("warningCount") or 0) if isinstance(quality, dict) else 0
+        return f"{count} advisory warning(s)" if count else ""
+    first = warnings[0] if isinstance(warnings[0], dict) else {}
+    rule_id = str(first.get("ruleId") or first.get("rule_id") or "test-quality")
+    message = str(first.get("message") or "")
+    text = f"{rule_id}: {message}".strip()
+    return text[:160] + ("..." if len(text) > 160 else "")
+
+
+def build_status_payload(
+    db: TaskDB, repo_task_id: int, *, event_limit: Optional[int] = 200
+) -> Dict[str, Any]:
+    """Status for one repo task. `event_limit=None` includes every event.
+
+    The default keeps the report pages bounded. The repair progress page asks
+    for all of them: it renders a scrollable history, and a task routinely
+    logs more than 200 events -- 340 and 438 on recent production runs -- so a
+    fixed newest-N silently dropped the beginning of the session.
+    """
     task = db.get_repo_task(repo_task_id)
     if not task:
         raise KeyError(f"Task {repo_task_id} not found")
+    latest_events = [_row_to_dict(row) for row in db.latest_events(repo_task_id, limit=event_limit)]
+    quality_by_class_task_id = _test_quality_by_class_task_id(latest_events)
     classes = []
     for row in db.list_class_tasks(repo_task_id):
         item = _row_to_dict(row)
@@ -34,9 +74,22 @@ def build_status_payload(db: TaskDB, repo_task_id: int) -> Dict[str, Any]:
             item["session_ids"] = json.loads(item.get("session_ids_json") or "[]")
         except json.JSONDecodeError:
             item["session_ids"] = []
+        item["mutation_display"] = item.get("mutation_detail") or item.get("mutation_score")
+        quality = quality_by_class_task_id.get(int(item.get("id") or 0), {})
+        if quality:
+            item["test_quality"] = quality
+            item["test_quality_warning"] = _compact_test_quality_warning(quality)
         item.pop("session_ids_json", None)
+        # Read by the fix session from the row itself; not part of the status payload.
+        item.pop("equivalence_review_json", None)
         classes.append(item)
-    latest_events = [_row_to_dict(row) for row in db.latest_events(repo_task_id, limit=30)]
+    # The fetch limit is not the only ceiling: this slice is what the page
+    # actually receives. It stayed at 30 while the query asked for 200, so the
+    # repair progress log showed the last 30 of a 340-event session however far
+    # the reader scrolled. `event_limit=None` means "the whole history" and
+    # must not be re-truncated here.
+    if event_limit is not None:
+        latest_events = latest_events[: min(30, event_limit)]
     latest_heartbeat = _row_to_dict(db.latest_heartbeat())
     task_dict = _row_to_dict(task)
     task_dict["selection"] = json_loads(task_dict.get("selection_json"))
@@ -69,8 +122,9 @@ def build_status_payload(db: TaskDB, repo_task_id: int) -> Dict[str, Any]:
     provider_cost = task_dict.get("provider_cost_usd")
     actual_cost = provider_cost if float(provider_cost or 0.0) > 0.0 else task_dict.get("actual_cost")
     budget_used_pct = None
+    hard_cap_multiplier = float(settings.budget_hard_cap_multiplier or 4.0)
     if estimated_cost and actual_cost is not None:
-        budget_used_pct = (float(actual_cost) / max(float(estimated_cost) * 2.0, 0.000001)) * 100.0
+        budget_used_pct = (float(actual_cost) / max(float(estimated_cost) * hard_cap_multiplier, 0.000001)) * 100.0
     metrics = {
         "cache_hit_ratio": (cache_read / max(input_tokens + cache_read, 1)),
         "input_output_ratio": (input_tokens / max(output_tokens, 1)),
@@ -82,7 +136,7 @@ def build_status_payload(db: TaskDB, repo_task_id: int) -> Dict[str, Any]:
         "actual_total_tokens": task_dict.get("total_tokens") or task_dict.get("actual_input_tokens", 0) + task_dict.get("actual_output_tokens", 0),
         "estimated_elapsed_seconds": task_dict.get("estimated_elapsed_seconds") or task_dict.get("estimated_seconds"),
         "actual_elapsed_seconds": task_dict.get("actual_elapsed_seconds") or task_dict.get("elapsed_seconds"),
-        "remaining_estimated_cost": None if estimated_cost is None or actual_cost is None else max(float(estimated_cost) * 2.0 - float(actual_cost), 0.0),
+        "remaining_estimated_cost": None if estimated_cost is None or actual_cost is None else max(float(estimated_cost) * hard_cap_multiplier - float(actual_cost), 0.0),
         "remaining_estimated_tokens": None if task_dict.get("estimated_total_tokens") is None else max(int(task_dict.get("estimated_total_tokens") or 0) - int(task_dict.get("total_tokens") or 0), 0),
         "remaining_estimated_seconds": None if (task_dict.get("estimated_elapsed_seconds") or task_dict.get("estimated_seconds")) is None or (task_dict.get("actual_elapsed_seconds") or task_dict.get("elapsed_seconds")) is None else max(float(task_dict.get("estimated_elapsed_seconds") or task_dict.get("estimated_seconds") or 0.0) - float(task_dict.get("actual_elapsed_seconds") or task_dict.get("elapsed_seconds") or 0.0), 0.0),
         "highest_cost_stage": task_dict.get("current_stage"),
@@ -93,6 +147,7 @@ def build_status_payload(db: TaskDB, repo_task_id: int) -> Dict[str, Any]:
         "latest_events": latest_events,
         "latest_heartbeat": latest_heartbeat,
         "aggregates": db.aggregate_repo_task(repo_task_id),
+        "workflow_dispositions": db.workflow_disposition_counts(repo_task_id),
         "metrics": metrics,
     }
 
@@ -142,7 +197,8 @@ def html_for_payload(payload: Dict[str, Any]) -> str:
         f"<td>{html.escape(row.get('status') or '')}</td>"
         f"<td>{html.escape(row.get('current_stage') or '')}</td>"
         f"<td>{row.get('coverage_line') if row.get('coverage_line') is not None else ''}</td>"
-        f"<td>{row.get('mutation_score') if row.get('mutation_score') is not None else ''}</td>"
+        f"<td>{html.escape(str(row.get('mutation_display') if row.get('mutation_display') is not None else ''))}</td>"
+        f"<td>{html.escape(str(row.get('test_quality_warning') or ''))}</td>"
         f"<td>{row.get('test_count') if row.get('test_count') is not None else ''}</td>"
         f"<td>{_fmt_tokens_html(row)}</td>"
         f"<td>{html.escape(', '.join(row.get('session_ids') or []))}</td>"
@@ -210,7 +266,7 @@ def html_for_payload(payload: Dict[str, Any]) -> str:
   </div>
   <h2>{target_section_label}</h2>
   <table>
-    <tr><th>ID</th><th>{target_label}</th><th>Status</th><th>Stage</th><th>Coverage</th><th>Mutation</th><th>Tests</th><th>Tokens</th><th>Session IDs</th></tr>
+    <tr><th>ID</th><th>{target_label}</th><th>Status</th><th>Stage</th><th>Coverage</th><th>Mutation</th><th>Test Quality</th><th>Tests</th><th>Tokens</th><th>Session IDs</th></tr>
     {class_rows}
   </table>
   <h2>Events</h2>
@@ -375,7 +431,7 @@ def build_task_renderables(
             row.get("current_stage") or "",
             row.get("target_display_name") or row.get("class_fqn") or "",
             "" if row.get("coverage_line") is None else f"{float(row['coverage_line']):.1f}",
-            "" if row.get("mutation_score") is None else f"{float(row['mutation_score']):.1f}",
+            "" if row.get("mutation_display") is None else str(row["mutation_display"]),
             "" if row.get("test_count") is None else str(row["test_count"]),
             tok_str,
         ]

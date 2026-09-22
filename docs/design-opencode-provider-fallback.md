@@ -120,7 +120,7 @@ Probe requests include the matching provider token when configured. Probe failur
 | `uta/config.py` | `Settings` env fields | Yes | N/A config layer | In scope | Adds chain/probe/fallback env variables. |
 | `uta/tasks/manager.py` | task stop/resume/events | Yes, via metadata/events | N/A SQLite task store | In scope | Existing lifecycle provides deferred retry. |
 | `uta/graph/nodes.py` | OpenCode workflow nodes | Yes | N/A workflow graph | In scope | Converts provider failure into stop/resume. |
-| `uta/ci_plugin/routes.py` | CI HTTP endpoints | No | Public traffic exists | Out of scope | No endpoint contract changes. |
+| `uta/api_trigger/routes.py` | RDC HTTP endpoints | No | Public traffic exists | Out of scope | No endpoint contract changes. |
 | `uta/opencode/server.py` | removed/legacy server helpers | Partially | Not the process turn path | Out of scope | Avoid reviving server mode unless later needed. |
 
 ## Implementation Architecture
@@ -170,7 +170,7 @@ Add a small OpenAI-compatible probe client with:
 
 Only filter models for providers with enough config to build a model-list URL. Providers without model API support are treated as unknown availability and remain candidates.
 
-The cache is process-local only. Restarting the daemon or CI plugin clears model availability state.
+The cache is process-local only. Restarting the daemon or API trigger clears model availability state.
 
 ### Error Classification
 
@@ -201,14 +201,14 @@ Rollout:
 
 1. Deploy with `UTA_OPENCODE_PROVIDER_FALLBACK_ENABLED=false`.
 2. Configure `UTA_OPENCODE_PROVIDER_CHAIN`.
-3. Enable fallback on the server after focused tests pass.
+3. Enable fallback on node2 after focused tests pass.
 4. Watch task events for model selection and fallback stop/resume loops.
 
 Rollback:
 
 - Set `UTA_OPENCODE_PROVIDER_FALLBACK_ENABLED=false`.
 - Move the desired model to the first provider-chain position.
-- Restart daemon/CI plugin.
+- Restart daemon/API trigger.
 
 No DB migration rollback is expected because v1 uses JSON metadata and task events only.
 
@@ -259,7 +259,7 @@ Do not log API keys or full HTTP headers.
 
 - Change scope: OpenCode process/config/router, graph fallback handling, task metadata/events, and tests are covered.
 - Abstraction: one routing policy module owns provider/model chain decisions.
-- Verification: unit, integration, and the server controlled-task checks are defined.
+- Verification: unit, integration, and node2 controlled-task checks are defined.
 - Compatibility: provider chain behavior is explicit and driven by env configuration.
 - Risks: stop/resume loops, model API failures, auth drift, and metadata growth are covered.
 - Simplicity: v1 avoids DB schema migration and public API changes.

@@ -1,0 +1,11 @@
+{
+  "allow": [
+    "/home/user/platform/**",
+    "/home/user/wms/**",
+    "/home/user/wms/sample-wms-core-api/**",
+    "/home/user/wms/sample-wms-inbound-core-api/**",
+    "/home/user/wms/sample-wms-outbound-core-api/**",
+    "/home/user/wms/sample-wms-storage-core-api/**",
+    "/home/user/wms/sample-baseinfo-core-api/**"
+  ]
+}

@@ -105,8 +105,8 @@ This is the preferred mode for benchmark A/B runs because it prevents recent git
 Example:
 
 ```bash
-uta run --repo ~/src/sample-service --module biz \
-  --class-fqn com.example.service.PickingService
+uta run --repo ~/wms/sample-outbound-core --module biz \
+  --class-fqn com.example.sample.outbound.core.biz.impl.PickingBizImpl
 ```
 
 The override is not an unconditional force. During `parse_context`, each explicit FQN must still exist in the parsed graph and pass `_is_testable_class`.
@@ -214,20 +214,20 @@ Current target selection is intentionally simple, but the behavior has sharp edg
 Use automatic git-history selection for exploratory runs:
 
 ```bash
-uta run --repo ~/src/sample-service --module biz --days 30 --max-files 10
+uta run --repo ~/wms/sample-outbound-core --module biz --days 30 --max-files 10
 ```
 
 Use all-files mode for selection audits:
 
 ```bash
-uta run --repo ~/src/sample-service --module biz --all
+uta run --repo ~/wms/sample-outbound-core --module biz --all
 ```
 
 Use explicit selection for benchmarks, regressions, and model comparisons:
 
 ```bash
-uta run --repo ~/src/sample-service --module biz \
-  --class-fqn com.example.service.PickingService \
+uta run --repo ~/wms/sample-outbound-core --module biz \
+  --class-fqn com.example.sample.outbound.core.biz.impl.PickingBizImpl \
   --coverage-gate 80 \
   --mutation-gate 70
 ```
@@ -235,7 +235,7 @@ uta run --repo ~/src/sample-service --module biz \
 Use small batches for difficult legacy classes:
 
 ```bash
-uta run --repo ~/src/sample-service --module biz --classes-per-run 1
+uta run --repo ~/wms/sample-outbound-core --module biz --classes-per-run 1
 ```
 
 Increase `--classes-per-run` only when the classes are small and the model context budget is known to be safe.

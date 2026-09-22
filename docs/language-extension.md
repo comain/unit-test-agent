@@ -27,22 +27,46 @@ uta/language/<language>/
     runner.py
 ```
 
-Only keep files that are meaningful for the language. If a feature is not supported, expose that through capabilities and deterministic diagnostics instead of leaving shared code to guess.
+Only keep files that are meaningful for the language. If a feature is not supported, say so through deterministic diagnostics instead of leaving shared code to guess.
 
-## 2. Target And Language Adapter
+## 2. Target And Language Ports
 
-Implement `LanguageAdapter` in `uta/language/<language>/adapter.py`.
+Implement the narrow ports declared in `uta/shared/languages.py` in
+`uta/language/<language>/adapter.py`. There is no single umbrella
+`LanguageAdapter` protocol any more: each port is named for the question it
+answers, and a consumer depends on the one it needs.
 
-Required behavior:
+`LanguageDetector` -- does this repository, or this path, belong to me?
 
 - `language`: stable lowercase backend id, for example `go`.
-- `capabilities()`: declare function targets, branch coverage, mutation, incremental diff enforcement, import safety hints, and generated-test autopush support.
 - `detect(repo_path, changed_paths=None)`: return marker evidence for auto-detection.
-- `normalize_target(raw)`: convert CLI, manifest, CI, and test inputs into `TargetRef`.
-- `generated_test_policy(repo_path, target)`: define allowed generated test roots and autopush policy.
-- `prompt_bundle()`: return prompt template names for plan, generation, and repair phases.
+- `is_production_source_path(path)`: true for repo-relative production source.
 
-Wire the adapter in `uta/engine/languages.py::default_registry()`.
+`TargetNormalizer` -- what strict target does this loose selection mean?
+
+- `normalize_target(raw)`: convert CLI, manifest, CI, and test inputs into `TargetRef`.
+
+`PromptBundleProvider` -- which prompt templates does this backend use?
+
+- `prompt_bundle()`: return prompt template names for plan, generation, and
+  repair phases. Publish the bundle from its own
+  `uta/language/<language>/prompt_bundle.py` so phases can reach the data
+  without constructing the composing adapter.
+
+`LanguageBackend` is the union of those three. Do not add a fourth
+responsibility to it: everything else a backend provides -- context,
+project-summary construction, workspace policy, batch generation, and the
+generation backend -- is resolved as an independent role.
+
+Wire every role into the sole built-in composition table,
+`uta/composition/language_backends.py`. `uta/shared/backends.py` owns only the
+language-neutral registration and lookup mechanism. Do not add a second
+resolver or a language `if`/`elif` beside this table.
+
+CI request validation uses the registered `adapter` languages as its allowlist.
+Registering that role therefore enables the language identifier; a
+syntactically valid but unregistered identifier is rejected before task
+creation.
 
 ## 3. Parsing
 
@@ -61,13 +85,15 @@ The provider must return a result compatible with `uta.engine.parse.ParseProject
 - `is_testable_target(target_id)`
 - `target_selections(target_ids)`
 
-Add the provider to `uta/engine/parse.py::make_parse_provider(language)`.
+Register the provider under the `parse` role in
+`uta/composition/language_backends.py`; `uta/shared/parse.py` resolves it.
 
 Parser internals belong under `uta/language/<language>/parse/`. Shared workflow code should not import those internals directly.
 
 ## 4. Context And Project Summary
 
-Implement `ContextProvider` in `uta/language/<language>/context.py`.
+Implement `ContextProvider` and a provider factory in
+`uta/language/<language>/context.py`.
 
 Required behavior:
 
@@ -75,9 +101,16 @@ Required behavior:
 - `export_target_context(target, **kwargs)`: create prompt-ready target context files or payloads.
 - `query_target(target, query=None)`: support CLI/query-index style target lookups.
 
-Add it to `uta/engine/context.py::make_context_provider(language, ...)`.
+The factory exposes `required_inputs` and `create(BackendConstructionRequest)`.
+Shared callers put available resources in the request input map; the factory
+declares and consumes only what that language needs. For example, Java requires
+a parsed graph while Python does not. Missing required inputs must produce a
+specific construction error. Register the factory under `context_factory`.
 
-Implement `ProjectSummaryProvider` in `uta/language/<language>/project_summary.py` and add it to `uta/engine/project_summary.py::make_project_summary_provider(...)`.
+Implement `ProjectSummaryProvider` and the equivalent backend-owned factory in
+`uta/language/<language>/project_summary.py`; register it under
+`project_summary_factory`. Shared context and summary code must not branch on a
+language name to satisfy construction differences.
 
 ## 5. Batch Generation
 
@@ -123,7 +156,7 @@ The result object must expose:
 - `coverage_summary`
 - `mutation_summary`
 
-Add the runner to `uta/engine/verification.py::default_verification_registry()`.
+Register the runner through the applicable verification composition registry.
 
 ## 7. Enforcement And CI
 
@@ -155,21 +188,25 @@ The evidence payload should include:
 
 Validation should reject unknown schema versions, wrong backends, stale commits, and failed gates with stable reason codes.
 
-Implement `CiLanguageHandler` in `uta/language/<language>/ci.py` so CI repair task creation is language-owned. Add it to the CI plugin registry wiring rather than branching in service code.
+Implement `CiLanguageHandler` in `uta/language/<language>/ci.py` so CI repair task creation is language-owned. Add it to the API trigger registry wiring rather than branching in service code.
 
 ## 8. Scoring And Plan Validation
 
-Implement `TargetScorer` in `uta/language/<language>/scoring.py` and add it to `uta/engine/scoring.py::default_scorer_registry()`.
+Implement `TargetScorer` in `uta/language/<language>/scoring.py`, register the
+`scoring` role in the composition table, and expose it through
+`uta/testgen/scoring.py::default_scorer_registry()`.
 
 Return `TargetScoreResult` with normalized method/callable rows. The rows should be useful for planning and repair prompts without exposing parser-specific objects.
 
-Implement `PlanContextExtractor` in `uta/language/<language>/validation.py` and add it to `uta/engine/validation.py::default_plan_context_registry()`.
+Implement `PlanContextExtractor` in `uta/language/<language>/validation.py`,
+register the `validation` role, and expose it through
+`uta/testgen/validation.py::default_plan_context_registry()`.
 
 Plan validation should consume normalized callable metadata, not language-specific markdown sections.
 
 ## 9. Prompts
 
-Add language-specific prompt templates under `uta/prompts/` and return their names from `PromptBundle`.
+Add language-specific prompt templates under `uta/testgen/prompts/` and return their names from `PromptBundle`.
 
 At minimum:
 
@@ -237,10 +274,15 @@ Add at least one staged E2E fixture or real-repo check before enabling productio
 
 ## 14. Acceptance Checklist
 
-- The language appears in `default_registry().languages`.
+- The adapter language appears in `default_registry().languages`.
+- Every supported role is registered in
+  `uta/composition/language_backends.py`; no parallel resolver exists.
 - `make_parse_provider(language)` works.
-- `make_context_provider(language, repo)` works, with required parser inputs supplied when needed.
-- `make_project_summary_provider(language, repo)` works.
+- `make_context_provider(language, repo, backend_inputs=...)` works, with the
+  backend factory declaring any required parser inputs.
+- `make_project_summary_provider(language, repo, backend_inputs=...)` works
+  under the same construction contract.
+- `make_backend(language, "generation_backend")` works.
 - `default_scorer_registry().scorer_for(language)` works.
 - `default_plan_context_registry().extract(..., language=language)` works.
 - `default_verification_registry().runner_for(language)` works.

@@ -1,6 +1,4 @@
-import pytest
 import os
-import shutil
 from uta.language.java.parse.cache import CacheManager
 from uta.language.java.parse.models import ParseResult, ParsedSymbol
 

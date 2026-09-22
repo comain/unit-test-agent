@@ -1,16 +1,18 @@
 """Tests for uta.language.java.scoring.mutation_roi and its integration with pitest.summarize."""
 import os
 import tempfile
-import textwrap
 
 import pytest
 
-from uta.maven.pitest import summarize_surviving_mutants, format_mutation_families_markdown
+from uta.enforcement.mutation_repair import MutationRepairRoundState, plan_mutation_repair
+from uta.language.java.maven.pitest import (
+    java_pit_families_to_repair_context,
+    summarize_surviving_mutants,
+    format_mutation_families_markdown,
+)
 from uta.language.java.scoring.mutation_roi import (
     _likely_equivalent,
     _family_effort,
-    roi_sort_key,
-    score_families,
 )
 
 
@@ -139,3 +141,55 @@ def test_markdown_omits_roi_columns_when_flag_off(pitest_xml_path):
     ranked = summarize_surviving_mutants(pitest_xml_path, "com.example.Foo")
     md = format_mutation_families_markdown(ranked)
     assert "kill-per-effort" not in md
+
+
+def test_pit_families_map_losslessly_onto_shared_model(pitest_xml_path):
+    # J1 step 3 (model-only convergence): PIT families now flow through the shared
+    # MutationRepairGroup. Assert the adapter carries every field the Java prompt
+    # relies on, with ROI fields set only when scored.
+    from uta.language.java.maven.pitest import pit_families_to_repair_groups
+
+    method_efforts = [_method_effort("calculate", 1), _method_effort("sendAll", 4)]
+    ranked = summarize_surviving_mutants(pitest_xml_path, "com.example.Foo", method_efforts=method_efforts)
+    groups = pit_families_to_repair_groups(ranked)
+
+    assert [g.symbol for g in groups] == [f["method"] for f in ranked]
+    top = groups[0]
+    assert top.symbol == "calculate"
+    assert top.family == "boundary"
+    assert top.killability == "high"
+    assert "ConditionalsBoundaryMutator" in top.mutator
+    assert top.lines == (10, 11)
+    assert top.roi is not None and top.effort_score and top.effort_band
+    assert len(top.survivors) == 2  # examples preserved as survivors
+    equiv = next(g for g in groups if g.symbol == "getName")
+    assert equiv.likely_equivalent is True
+
+    # ROI disabled -> roi unset on every group.
+    plain = pit_families_to_repair_groups(summarize_surviving_mutants(pitest_xml_path, "com.example.Foo"))
+    assert all(g.roi is None and g.effort_score == "" for g in plain)
+
+
+def test_java_pit_families_feed_shared_mutation_repair_planner(pitest_xml_path):
+    method_efforts = [_method_effort("calculate", 1), _method_effort("sendAll", 4)]
+    ranked = summarize_surviving_mutants(pitest_xml_path, "com.example.Foo", method_efforts=method_efforts)
+    context = java_pit_families_to_repair_context(
+        target_id="com.example.Foo",
+        source_path="/repo/src/main/java/com/example/Foo.java",
+        test_paths=("/repo/src/test/java/com/example/FooTest.java",),
+        reproduce_command="mvn org.pitest:pitest-maven:mutationCoverage",
+        families=ranked,
+        artifact_path="/repo/.uta_cache/context/Foo.mutation_families.md",
+    )
+
+    first = plan_mutation_repair(
+        context,
+        MutationRepairRoundState(target_id=context.target_id, attempt_index=1),
+        focused_group_count=1,
+    )
+
+    assert context.language == "java"
+    assert first.language == "java"
+    assert first.round_kind == "full_roi"
+    assert [group.symbol for group in first.selected_groups] == [group.symbol for group in context.groups]
+    assert first.prompt_flags["mutation_repair_roi_guided_full"] is True

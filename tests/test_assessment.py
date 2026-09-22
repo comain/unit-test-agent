@@ -4,122 +4,180 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from uta.assessment import assess_session, assess_sessions, compare_sessions
-from uta.cli import main
+from agent_core.harness import (
+    AgentSessionRef,
+    AvailableSessionDiagnostics,
+    DiagnosticsReasonCode,
+    ModelUsage,
+    TokenUsage,
+    UnavailableSessionDiagnostics,
+)
+from agent_core.harness.diagnostics import build_report
+from uta.app.cli import main
+from uta.app.session_assessment import (
+    assess_sessions,
+    assessment_from_report,
+    compare_sessions,
+)
 
 
-def _write_part(conn, session_id, time_created, payload):
-    conn.execute(
-        "insert into part(session_id, time_created, data) values (?, ?, ?)",
-        (session_id, time_created, json.dumps(payload)),
-    )
+SCHEMA = """
+CREATE TABLE message (
+  id text PRIMARY KEY, session_id text NOT NULL, time_created integer NOT NULL,
+  time_updated integer NOT NULL, data text NOT NULL
+);
+CREATE TABLE part (
+  id text PRIMARY KEY, message_id text NOT NULL, session_id text NOT NULL,
+  time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+);
+"""
 
 
 def _build_db(tmp_path: Path) -> Path:
-    db_path = tmp_path / "opencode.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute("create table part(session_id text, time_created integer, data text)")
+    path = tmp_path / "sessions.db"
+    connection = sqlite3.connect(path)
+    connection.executescript(SCHEMA)
+    for index, (session, model, total, input_tokens, output_tokens) in enumerate(
+        [
+            ("ses-current", "provider/current", 26, 15, 5),
+            ("ses-base", "provider/base", 10, 8, 1),
+        ]
+    ):
+        payload = {
+            "role": "assistant",
+            "providerID": "provider",
+            "modelID": model,
+            "tokens": {
+                "input": input_tokens,
+                "output": output_tokens,
+                "reasoning": total - input_tokens - output_tokens - 5,
+                "cache": {"read": 5, "write": 0},
+                "total": total,
+            },
+            "time": {"created": 1000, "completed": 3000},
+        }
+        connection.execute(
+            "INSERT INTO message VALUES (?,?,?,?,?)",
+            (f"m{index}", session, index, index, json.dumps(payload)),
+        )
+        connection.execute(
+            "INSERT INTO part VALUES (?,?,?,?,?,?)",
+            (
+                f"p{index}",
+                f"m{index}",
+                session,
+                index,
+                index,
+                json.dumps(
+                    {
+                        "type": "tool",
+                        "tool": "read",
+                        "state": {
+                            "status": "completed",
+                            "time": {"start": 1000, "end": 1500},
+                        },
+                    }
+                ),
+            ),
+        )
+    connection.commit()
+    connection.close()
+    return path
 
-    # Current session
-    _write_part(conn, "ses-current", 1000, {"type": "text", "text": "prompt"})
-    _write_part(conn, "ses-current", 1100, {"type": "step-start"})
-    _write_part(conn, "ses-current", 1200, {"type": "tool", "tool": "read"})
-    _write_part(conn, "ses-current", 1300, {"type": "text", "text": "hello"})
-    _write_part(conn, "ses-current", 1400, {"type": "reasoning", "text": "think"})
-    _write_part(
-        conn,
-        "ses-current",
-        1500,
-        {
-            "type": "step-finish",
-            "reason": "tool-calls",
-            "tokens": {"input": 10, "output": 2, "reasoning": 1, "total": 17, "cache": {"read": 4, "write": 0}},
-        },
+
+def test_assessment_projects_neutral_totals_models_and_tools(tmp_path):
+    value = assess_sessions(
+        ["ses-current", "ses-base"],
+        _build_db(tmp_path),
+        harness_name="opencode",
     )
-    _write_part(conn, "ses-current", 1600, {"type": "step-start"})
-    _write_part(conn, "ses-current", 1700, {"type": "tool", "tool": "grep"})
-    _write_part(
-        conn,
-        "ses-current",
-        1800,
-        {
-            "type": "step-finish",
-            "reason": "stop",
-            "tokens": {"input": 5, "output": 3, "reasoning": 0, "total": 9, "cache": {"read": 1, "write": 0}},
-        },
+
+    assert value.status == "available"
+    assert value.session_ids == ["ses-current", "ses-base"]
+    assert value.total_tokens == 36
+    assert value.input_tokens == 23
+    assert value.tool_call_count == 2
+    assert value.top_tools() == [("read", 2)]
+    assert set(value.usage_by_model) == {"provider/base", "provider/current"}
+
+
+def test_unavailable_diagnostics_are_not_projected_as_zero():
+    ref = AgentSessionRef("scripted", "missing")
+    value = assessment_from_report(
+        build_report(
+            [
+                UnavailableSessionDiagnostics(
+                    session=ref,
+                    reason_code=DiagnosticsReasonCode.STORAGE_UNAVAILABLE,
+                )
+            ]
+        )
     )
 
-    # Baseline session
-    _write_part(conn, "ses-base", 2000, {"type": "step-start"})
-    _write_part(conn, "ses-base", 2100, {"type": "tool", "tool": "read"})
-    _write_part(
-        conn,
-        "ses-base",
-        2200,
-        {
-            "type": "step-finish",
-            "reason": "stop",
-            "tokens": {"input": 8, "output": 1, "reasoning": 0, "total": 10, "cache": {"read": 2, "write": 0}},
-        },
+    assert value.status == "unavailable"
+    assert value.reason_codes == ["storage_unavailable"]
+    assert value.total_tokens is None
+    assert value.tool_call_count is None
+
+
+def test_unregistered_harness_is_explicitly_unsupported():
+    value = assess_sessions(["session-1"], harness_name="scripted")
+
+    assert value.status == "unsupported"
+    assert value.reason_codes == ["harness_unsupported"]
+    assert value.total_tokens is None
+
+
+def test_mixed_report_withholds_totals_and_comparison():
+    current_ref = AgentSessionRef("scripted", "current")
+    missing_ref = AgentSessionRef("scripted", "missing")
+    current = assessment_from_report(
+        build_report(
+            [
+                AvailableSessionDiagnostics(
+                    session=current_ref,
+                    usage=TokenUsage(input_tokens=5, total_tokens=5),
+                    usage_by_model=(
+                        ModelUsage(
+                            model="model", usage=TokenUsage(input_tokens=5, total_tokens=5)
+                        ),
+                    ),
+                ),
+                UnavailableSessionDiagnostics(
+                    session=missing_ref,
+                    reason_code=DiagnosticsReasonCode.LOCATOR_NOT_FOUND,
+                ),
+            ]
+        )
+    )
+    baseline = assessment_from_report(
+        build_report(
+            [
+                AvailableSessionDiagnostics(
+                    session=AgentSessionRef("scripted", "baseline"),
+                    usage=TokenUsage(total_tokens=3),
+                )
+            ]
+        )
     )
 
-    conn.commit()
-    conn.close()
-    return db_path
+    assert current.status == "mixed"
+    assert current.total_tokens is None
+    assert compare_sessions(current, baseline)["total_tokens"]["delta"] is None
 
 
-def test_assess_session_summarizes_tokens_tools_and_text(tmp_path):
-    db_path = _build_db(tmp_path)
-    assessment = assess_session("ses-current", db_path)
+def test_cli_assess_json_keeps_db_path_compatibility_without_raw_payload(tmp_path):
+    secret = "private-model-output-must-not-appear"
+    path = _build_db(tmp_path)
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "INSERT INTO part VALUES (?,?,?,?,?,?)",
+        ("secret", "m0", "ses-current", 9, 9, json.dumps({"type": "text", "text": secret})),
+    )
+    connection.commit()
+    connection.close()
 
-    assert assessment.part_count == 9
-    assert assessment.step_count == 2
-    assert assessment.stop_steps == 1
-    assert assessment.tool_call_count == 2
-    assert assessment.tool_counts["read"] == 1
-    assert assessment.tool_counts["grep"] == 1
-    assert assessment.text_chars >= len("prompt") + len("hello")
-    assert assessment.reasoning_chars == len("think")
-    assert assessment.input_tokens == 15
-    assert assessment.output_tokens == 5
-    assert assessment.reasoning_tokens == 1
-    assert assessment.cache_read_tokens == 5
-    assert assessment.total_tokens == 26
-    assert assessment.top_steps()[0].total_tokens == 17
-
-
-def test_compare_sessions_calculates_deltas(tmp_path):
-    db_path = _build_db(tmp_path)
-    current = assess_session("ses-current", db_path)
-    baseline = assess_session("ses-base", db_path)
-    comparison = compare_sessions(current, baseline)
-
-    assert comparison["non_cache_total"]["current"] == 21
-    assert comparison["non_cache_total"]["baseline"] == 9
-    assert comparison["tool_call_count"]["delta"] == 1
-    assert comparison["output_tokens"]["pct_delta"] == 400.0
-
-
-def test_assess_sessions_aggregates_multiple_session_ids(tmp_path):
-    db_path = _build_db(tmp_path)
-
-    assessment = assess_sessions(["ses-current", "ses-base"], db_path)
-
-    assert assessment.session_ids == ["ses-current", "ses-base"]
-    assert assessment.part_count == 12
-    assert assessment.step_count == 3
-    assert assessment.tool_call_count == 3
-    assert assessment.input_tokens == 23
-    assert assessment.output_tokens == 6
-    assert assessment.cache_read_tokens == 7
-    assert assessment.total_tokens == 36
-    assert assessment.top_steps()[0].total_tokens == 17
-
-
-def test_cli_assess_json_output(tmp_path):
-    db_path = _build_db(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
+    result = CliRunner().invoke(
         main,
         [
             "assess",
@@ -127,35 +185,37 @@ def test_cli_assess_json_output(tmp_path):
             "ses-current",
             "--baseline-session-id",
             "ses-base",
+            "--harness",
+            "opencode",
             "--db-path",
-            str(db_path),
+            str(path),
             "--json-output",
         ],
     )
 
-    assert result.exit_code == 0
-    assert "\"session_id\": \"ses-current\"" in result.output
-    assert "\"comparison\"" in result.output
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["current"]["status"] == "available"
+    assert payload["current"]["tokens"]["total"] == 26
+    assert "comparison" in payload
+    assert secret not in result.output
 
 
-def test_cli_assess_json_output_aggregates_multiple_session_ids(tmp_path):
-    db_path = _build_db(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
+def test_cli_assess_reports_unsupported_instead_of_zero():
+    result = CliRunner().invoke(
         main,
         [
             "assess",
             "--session-id",
-            "ses-current",
-            "--session-id",
-            "ses-base",
-            "--db-path",
-            str(db_path),
+            "session-1",
+            "--harness",
+            "scripted",
             "--json-output",
         ],
     )
 
-    assert result.exit_code == 0
-    payload = json.loads(result.output)
-    assert payload["current"]["session_ids"] == ["ses-current", "ses-base"]
-    assert payload["current"]["tokens"]["input"] == 23
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)["current"]
+    assert payload["status"] == "unsupported"
+    assert payload["reason_codes"] == ["harness_unsupported"]
+    assert payload["tokens"]["total"] is None

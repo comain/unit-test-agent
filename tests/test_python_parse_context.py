@@ -4,8 +4,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from uta.cli import main
-from uta.engine.languages import RawTargetSelection, default_registry
+from uta.app.cli import main
+from uta.shared.languages import RawTargetSelection, default_registry
 from uta.language.python.adapter import PythonLanguageAdapter
 from uta.language.python.context_builder import PythonContextBuilder
 from uta.language.python.parse.parser import PythonParser

@@ -1,0 +1,153 @@
+{
+  "artifact_keys": [
+    "import_compat",
+    "mutation_batch_count",
+    "mutation_generation_strategy",
+    "mutation_scope",
+    "mutmut_generation_policy"
+  ],
+  "backend": "python_enforcer",
+  "changedLines": {
+    "jobs/forecast.py": [
+      3
+    ]
+  },
+  "changedProductionFiles": [
+    "jobs/forecast.py"
+  ],
+  "command_count": 5,
+  "command_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "command_names": [
+    "coverage_erase",
+    "pytest_coverage_run",
+    "coverage_xml",
+    "mutmut_generate_metadata",
+    "mutmut_run_selected"
+  ],
+  "coverage": {
+    "changed_lines": {
+      "jobs/forecast.py": [
+        3
+      ]
+    },
+    "covered": 1,
+    "gate": 80.0,
+    "modules": 1,
+    "no_executable_changed_lines": false,
+    "passed": true,
+    "rate": 100.0,
+    "scope": "changed_lines",
+    "total": 1
+  },
+  "language": "python",
+  "mutation": {
+    "candidatePlan": {
+      "activeCandidates": 1,
+      "changedLines": 1,
+      "coveredChangedLines": 1,
+      "eligibleMutationCandidates": 1,
+      "eligibleOpportunities": 2,
+      "exactToolCandidateKeys": 1,
+      "filterMechanisms": [
+        "mutmut3_metadata_selected_execution"
+      ],
+      "killed": "N",
+      "noTests": 0,
+      "omittedByOnePerLine": 0,
+      "reportFullCandidates": 1,
+      "runMutants": 1,
+      "sampled": false,
+      "sampledTargets": 0,
+      "scoredMutants": 1,
+      "suppressedCandidates": 0,
+      "suppressedOpportunities": 0,
+      "survived": 0,
+      "suspicious": 0,
+      "targetPlans": 1,
+      "timeout": 0
+    },
+    "changedLineMutantsGenerated": 1,
+    "changedLineMutantsKilled": "N",
+    "changedLineMutantsScored": "N",
+    "changed_lines": {
+      "jobs/forecast.py": [
+        3
+      ]
+    },
+    "gate": 70.0,
+    "generated": 1,
+    "killed": "N",
+    "modules": 1,
+    "noCoverage": 0,
+    "noTests": 0,
+    "passed": true,
+    "rate": 100.0,
+    "scope": "changed_lines",
+    "survived": 0,
+    "suspicious": 0,
+    "timeout": 0
+  },
+  "passed": true,
+  "reasonCode": "passed",
+  "schemaVersion": 1,
+  "setup": {
+    "cacheKey": "python-env:<hex16>",
+    "configSources": {
+      "artifact_dir": "env:UTA_PYTHON_ARTIFACT_DIR",
+      "dependency_overlay_enabled": "default",
+      "environment_profile": "default",
+      "mutmut_bin": "env:UTA_PYTHON_MUTMUT_BIN",
+      "python2_bin": "default",
+      "python2_mutmut_bin": "default",
+      "python_bin": "env:UTA_PYTHON_BIN",
+      "setup_command": "default",
+      "timeout_seconds": "default"
+    },
+    "dependencyFingerprints": {},
+    "environmentProfile": "default"
+  },
+  "status": "passed",
+  "summary": "Python enforcement passed",
+  "targets": [
+    {
+      "display_name": "jobs/forecast.py",
+      "granularity": "file",
+      "language": "python",
+      "source_path": "jobs/forecast.py",
+      "target_id": "pyfile:jobs/forecast.py"
+    }
+  ],
+  "top_level_keys": [
+    "artifacts",
+    "backend",
+    "baseCommit",
+    "baseRef",
+    "changedLines",
+    "changedProductionFiles",
+    "commands",
+    "coverage",
+    "enforcementCoreVersion",
+    "evidenceId",
+    "generatedAt",
+    "headCommit",
+    "headRef",
+    "language",
+    "mutation",
+    "passed",
+    "reasonCode",
+    "repo",
+    "schemaVersion",
+    "setup",
+    "status",
+    "summary",
+    "targetResults",
+    "targets",
+    "utaVersion"
+  ]
+}

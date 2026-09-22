@@ -1,18 +1,12 @@
 from pathlib import Path
 
-from uta.engine import (
-    BatchGenerationRequest,
-    ContextProvider,
-    ContextQuery,
-    ProjectSummaryArtifacts,
-    RawTargetSelection,
-    TargetRef,
-    ValidationVerdict,
-    default_registry,
-    default_plan_context_registry,
-    make_context_provider,
-    validate_plan_breadth,
-)
+from uta.enforcement.enforcement import ValidationVerdict
+from uta.shared.languages import RawTargetSelection, default_registry
+from uta.shared.targets import TargetRef
+from uta.testgen.batch import BatchGenerationRequest
+from uta.testgen.context import ContextProvider, ContextQuery, make_context_provider
+from uta.testgen.project_summary import ProjectSummaryArtifacts
+from uta.testgen.validation import default_plan_context_registry, validate_plan_breadth
 from uta.language.java.adapter import JavaLanguageAdapter
 from uta.language.python.adapter import PythonLanguageAdapter
 from uta.language.python.context import PythonContextProvider

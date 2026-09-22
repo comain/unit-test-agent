@@ -2,7 +2,7 @@
 
 ## Status
 
-Provider-chain routing, model probing, provider-token injection, and task stop/resume fallback are implemented and deployed to the server by git pull.
+Provider-chain routing, model probing, provider-token injection, and task stop/resume fallback are implemented and deployed to node2 by git pull.
 
 ## Basic Configuration
 
@@ -38,7 +38,7 @@ UTA will call the provider's OpenAI-compatible models endpoint when enough provi
 
 Task creation uses this authenticated probe before selecting the first model. Runtime fallback still handles rate limits or model errors that happen after selection.
 
-The model availability cache is process-local. Restarting the daemon or CI plugin clears it.
+The model availability cache is process-local. Restarting the daemon or API trigger clears it.
 
 ## Runtime Behavior
 
@@ -89,15 +89,15 @@ export UTA_OPENCODE_PROVIDER_FALLBACK_ENABLED=false
 
 To choose a fixed model while fallback is disabled, place that model first in `UTA_OPENCODE_PROVIDER_CHAIN`.
 
-Restart the relevant daemon or CI plugin after changing env values.
+Restart the relevant daemon or API trigger after changing env values.
 
 ## Verification
 
-Before enabling on the server:
+Before enabling on node2:
 
 ```bash
 python3 -m pytest tests/test_tiered_routing.py tests/test_tiered_routing_resilience.py tests/test_opencode_process.py tests/test_opencode_config.py
 python3 -m pytest tests/test_tasks.py tests/test_daemon_preemption.py tests/test_daemon_retry.py
 ```
 
-After enabling on the server, trigger a controlled task and verify the task event stream shows model selection. For fallback validation, configure a known-disabled first model followed by a valid model, then confirm the task stops, resumes, and continues with the second candidate.
+After enabling on node2, trigger a controlled task and verify the task event stream shows model selection. For fallback validation, configure a known-disabled first model followed by a valid model, then confirm the task stops, resumes, and continues with the second candidate.

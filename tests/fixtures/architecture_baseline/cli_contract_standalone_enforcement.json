@@ -1,0 +1,29 @@
+{
+  "help_lines": [
+    "usage: uta_python_test_enforce.py [-h] [--repo REPO] [--target TARGET] [--test-path TEST_PATH]",
+    "                                  [--base-ref BASE_REF] [--coverage-gate COVERAGE_GATE]",
+    "                                  [--mutation-gate MUTATION_GATE]",
+    "                                  [--syntax-version {python3,python2}]",
+    "                                  [--evidence-output EVIDENCE_OUTPUT] [--dry-run] [--json-output]",
+    "",
+    "Run lightweight UTA Python test enforcement.",
+    "",
+    "options:",
+    "  -h, --help            show this help message and exit",
+    "  --repo REPO           Target Python repository.",
+    "  --target TARGET       Python target path.py or path.py::symbol. Repeatable.",
+    "  --test-path TEST_PATH",
+    "                        Test path to run. Repeatable.",
+    "  --base-ref BASE_REF   Git base ref for incremental enforcement.",
+    "  --coverage-gate COVERAGE_GATE",
+    "                        Coverage gate percentage.",
+    "  --mutation-gate MUTATION_GATE",
+    "                        Mutation gate percentage.",
+    "  --syntax-version {python3,python2}",
+    "                        Python runtime lane.",
+    "  --evidence-output EVIDENCE_OUTPUT",
+    "                        Optional JSON evidence output path.",
+    "  --dry-run             Resolve changed targets without running the gate.",
+    "  --json-output         Print machine-readable JSON only."
+  ]
+}

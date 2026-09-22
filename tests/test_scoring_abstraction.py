@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from uta.engine.languages import RawTargetSelection, default_registry
-from uta.engine.scoring import default_scorer_registry
+from uta.shared.languages import RawTargetSelection, default_registry
+from uta.testgen.scoring import default_scorer_registry
 from uta.language.python.scoring import PythonTargetScorer
 
 

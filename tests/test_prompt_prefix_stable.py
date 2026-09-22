@@ -5,8 +5,22 @@ with different per-class variables, so provider-side caching can treat the
 prefix as a cache hit across multiple class invocations in the same run.
 """
 
-import pytest
-from uta.prompts.loader import render_prompt_split, CACHE_BOUNDARY_MARKER
+from pathlib import Path
+
+from uta.testgen.prompts.loader import render_prompt_split, CACHE_BOUNDARY_MARKER
+
+
+_PRODUCTION_PROMPTS = (
+    "fix_compile",
+    "fix_coverage",
+    "fix_mutations",
+    "generate_test",
+    "plan_tests",
+    "python_fix_compile",
+    "python_fix_coverage",
+    "python_fix_mutations",
+    "python_generate_test",
+)
 
 
 # Shared stable variables (same value across all class invocations)
@@ -14,6 +28,7 @@ _COMMON_PLAN_KWARGS = dict(
     coverage_gate=70,
     strict_coverage_classes=[],
     roi_enabled=True,
+    index_query_command="/ctx/uta-query-index",
 )
 
 _COMMON_GEN_KWARGS = dict(
@@ -27,7 +42,7 @@ _COMMON_GEN_KWARGS = dict(
     repo_summary_abs="",
     context_summary_abs="/ctx/summary.md",
     test_guidance_abs="/ctx/guidance.md",
-    generation_lookup_command="/ctx/uta-query-index --section generation_lookup",
+    index_query_command="/ctx/uta-query-index --section generation_lookup",
 )
 
 _COMMON_FIX_COMPILE_KWARGS = dict(
@@ -169,9 +184,10 @@ def test_fix_mutations_stable_prefix_identical_across_classes():
 
 
 def test_all_prompts_have_cache_boundary():
-    for name in ("plan_tests", "generate_test", "fix_compile", "fix_coverage", "fix_mutations"):
-        from uta.prompts.loader import _read_prompt
-        raw = _read_prompt(name)
+    for name in _PRODUCTION_PROMPTS:
+        raw = (
+            Path("uta") / "testgen" / "prompts" / f"{name}.txt"
+        ).read_text(encoding="utf-8")
         assert CACHE_BOUNDARY_MARKER in raw, f"{name}.txt is missing CACHE_BOUNDARY marker"
 
 
@@ -180,7 +196,7 @@ def test_stable_prefix_non_empty_for_all_prompts():
         ("plan_tests", dict(
             batch=["com.example.Foo"], coverage_gate=70,
             strict_coverage_classes=[], target_context_files="- Foo.context.md",
-            roi_enabled=False,
+            roi_enabled=False, index_query_command="uta query-index",
         )),
         ("fix_compile", dict(
             class_fqn="com.example.Foo", compile_errors="err",
@@ -201,6 +217,41 @@ def test_stable_prefix_non_empty_for_all_prompts():
             source_path="/s/Foo.java", test_file_path="/t/FooTest.java",
             target_context_abs="/c/Foo.context.md", target_symbols_abs="/c/Foo.symbols.md",
             mutation_roi_enabled=False, mutation_roi_skip_expensive=False,
+        )),
+        ("python_generate_test", dict(
+            canonical_module="pkg.foo", display_name="foo.py", target_id="pyfile:foo.py",
+            source_path="foo.py", symbol="", syntax_version="python3",
+            parser_backend="tree-sitter", generated_test_path="tests/test_foo.py",
+            existing_test_path="", existing_test_reasons=[], context_abs="/c/foo.md",
+            context_json_abs="/c/foo.json", index_query_command="uta query-index",
+            companion_files=[], side_effect_hints=[], changed_line_hints=[],
+            scored_methods=[], prior_hints=[], spec_context="",
+        )),
+        ("python_fix_compile", dict(
+            canonical_module="pkg.foo", display_name="foo.py", target_id="pyfile:foo.py",
+            source_path="foo.py", symbol="", generated_test_path="tests/test_foo.py",
+            test_file_path="tests/test_foo.py", context_abs="/c/foo.md",
+            target_context_abs="/c/foo.md", context_json_abs="/c/foo.json",
+            index_query_command="uta query-index", compile_errors="syntax error",
+        )),
+        ("python_fix_coverage", dict(
+            canonical_module="pkg.foo", display_name="foo.py", target_id="pyfile:foo.py",
+            source_path="foo.py", symbol="", generated_test_path="tests/test_foo.py",
+            test_file_path="tests/test_foo.py", context_abs="/c/foo.md",
+            target_context_abs="/c/foo.md", context_json_abs="/c/foo.json",
+            index_query_command="uta query-index", coverage_gate=80,
+            coverage_diagnostics="line 1", coverage_report="",
+        )),
+        ("python_fix_mutations", dict(
+            canonical_module="pkg.foo", display_name="foo.py", target_id="pyfile:foo.py",
+            source_path="foo.py", symbol="", generated_test_path="tests/test_foo.py",
+            test_file_path="tests/test_foo.py", context_abs="/c/foo.md",
+            target_context_abs="/c/foo.md", context_json_abs="/c/foo.json",
+            index_query_command="uta query-index", mutation_gate=70,
+            mutation_diagnostics="survivor", mutation_report="",
+            mutation_repair_context_abs="", mutation_repair_roi_guided_full=False,
+            mutation_repair_split=False, mutation_repair_group_abs="",
+            mutation_repair_group="",
         )),
     ]
     for name, kwargs in prompts_with_kwargs:

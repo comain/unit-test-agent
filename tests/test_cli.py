@@ -1,4 +1,5 @@
 import json
+import os
 import pytest
 import shutil
 import zipfile
@@ -11,14 +12,27 @@ from types import SimpleNamespace
 from uta.language.java.parse.java_parser import JavaParser
 from uta.language.java.parse.graph_builder import GraphBuilder
 from uta.language.java.context_builder import ContextBuilder
-from uta.cli import (
+from uta.app.cli import (
+    _cleanup_daemon_pool,
     _configure_run_logging,
+    _daemon_child_popen_kwargs,
+    _run_python_batch_cli,
     main,
-    _pick_openai_oauth_method,
-    _probe_openai_auth_ready,
-    _probe_openai_auth_ready_with_retry,
     _task_quality_options,
 )
+from uta.shared.targets import TargetRef
+from uta.testgen.batch import BatchGenerationResult
+
+
+@pytest.fixture(autouse=True)
+def reset_opencode_model_health():
+    from agent_core.harness import tiered_router
+
+    tiered_router._tracker.reset()
+    tiered_router.reset_model_availability_cache()
+    yield
+    tiered_router._tracker.reset()
+    tiered_router.reset_model_availability_cache()
 
 
 class StubClient:
@@ -38,6 +52,29 @@ class StubClient:
 
     def list_provider_auth(self, repo_path=None):
         return {"openai": self.methods}
+
+    def authorize_provider_oauth(self, provider_id, method_index, repo_path=None, inputs=None):
+        self.authorize_calls.append((provider_id, method_index, repo_path, inputs))
+        return self.auth
+
+    def create_session(self, model_id=None, provider_id=None):
+        self.create_calls.append((model_id, provider_id))
+        return f"session-{len(self.create_calls)}"
+
+    def send_message(self, session_id, content, model_id=None):
+        self.send_calls.append((session_id, content, model_id))
+        return {}
+
+    def poll_completion(self, session_id, timeout=0):
+        if not self.probe_events:
+            raise AssertionError("No probe events configured")
+        return self.probe_events.pop(0)
+
+    def delete_session(self, session_id):
+        self.delete_calls.append(session_id)
+
+    def list_providers(self, repo_path=None):
+        return self.providers
 
 
 def test_task_quality_options_use_stored_ci_incremental_gates():
@@ -65,148 +102,128 @@ def test_task_quality_options_default_to_batch_cli_gates():
     assert coverage_gate == 80
     assert mutation_gate == 70
 
-    def authorize_provider_oauth(self, provider_id, method_index, repo_path=None, inputs=None):
-        self.authorize_calls.append((provider_id, method_index, repo_path, inputs))
-        return self.auth
 
-    def create_session(self, model_id=None, provider_id=None):
-        self.create_calls.append((model_id, provider_id))
-        return f"session-{len(self.create_calls)}"
-
-    def send_message(self, session_id, content, model_id=None):
-        self.send_calls.append((session_id, content, model_id))
-        return {}
-
-    def poll_completion(self, session_id, timeout=0):
-        if not self.probe_events:
-            raise AssertionError("No probe events configured")
-        return self.probe_events.pop(0)
-
-    def delete_session(self, session_id):
-        self.delete_calls.append(session_id)
-
-    def list_providers(self, repo_path=None):
-        return self.providers
-
-
-def test_pick_openai_oauth_method_prefers_headless():
-    methods = [
-        {"type": "oauth", "label": "ChatGPT Pro/Plus (browser)"},
-        {"type": "oauth", "label": "ChatGPT Pro/Plus (headless)"},
-        {"type": "api", "label": "Manually enter API Key"},
-    ]
-    assert _pick_openai_oauth_method(methods) == 1
-
-
-def test_probe_openai_auth_ready_success(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
-    calls = []
-    monkeypatch.setattr(
-        "uta.opencode.process.OpenCodeProcess.run_turn",
-        lambda self, message, model_id=None, repo_path=None, timeout=None: calls.append((message, model_id, repo_path, timeout)) or SimpleNamespace(type="completed", result="OK", error=None),
+def test_python_cli_preserves_ci_incremental_quality_mode(tmp_path, monkeypatch):
+    captured = {}
+    target = TargetRef(
+        language="python",
+        target_id="pkg/router.py",
+        display_name="pkg/router.py",
     )
 
-    assert _probe_openai_auth_ready(StubClient(), "/tmp/repo") is True
-    assert calls == [("Reply with only: OK", "openai/gpt-5.4", "/tmp/repo", 120)]
-
-
-def test_probe_openai_auth_ready_prefers_provider_from_model(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openrouter")
-    calls = []
     monkeypatch.setattr(
-        "uta.opencode.process.OpenCodeProcess.run_turn",
-        lambda self, message, model_id=None, repo_path=None, timeout=None: calls.append((message, model_id, repo_path, timeout)) or SimpleNamespace(type="completed", result="OK", error=None),
+        "uta.app.cli._python_targets_for_run", lambda *args, **kwargs: [target]
+    )
+    monkeypatch.setattr(
+        "uta.app.cli._configure_run_logging", lambda *args, **kwargs: str(tmp_path / "run.log")
+    )
+    monkeypatch.setattr("uta.app.cli._prepare_workspace", lambda *args, **kwargs: None)
+
+    def capture_request(request):
+        captured["request"] = request
+        return BatchGenerationResult(results={})
+
+    monkeypatch.setattr("uta.testgen.runner.run_batch_generation", capture_request)
+    monkeypatch.setattr("uta.reporting.Reporter.save_report", lambda *args, **kwargs: None)
+    monkeypatch.setattr("uta.reporting.Reporter.display_summary", lambda *args, **kwargs: None)
+
+    _run_python_batch_cli(
+        repo=str(tmp_path),
+        explicit_targets=(target.target_id,),
+        max_files=1,
+        days=1,
+        module=None,
+        select_all_files=False,
+        coverage_gate=95,
+        mutation_gate=100,
+        quality_mode="ci_incremental",
     )
 
-    assert _probe_openai_auth_ready(StubClient(), "/tmp/repo") is True
-    assert calls == [("Reply with only: OK", "openai/gpt-5.4", "/tmp/repo", 120)]
+    assert captured["request"].quality_mode == "ci_incremental"
 
 
-def test_probe_openai_auth_ready_returns_false_for_provider_auth(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
-    monkeypatch.setattr(
-        "uta.opencode.process.OpenCodeProcess.run_turn",
-        lambda self, message, model_id=None, repo_path=None, timeout=None: SimpleNamespace(
-            type="error",
-            result="",
-            error={"name": "ProviderAuthError", "data": {"message": "missing"}},
-        ),
+def test_task_daemon_launches_children_in_process_group():
+    kwargs = _daemon_child_popen_kwargs()
+    if os.name != "nt":
+        assert kwargs["start_new_session"] is True
+    else:
+        assert kwargs == {}
+
+
+def test_daemon_shutdown_cleanup_requeues_live_child_task(tmp_path, monkeypatch):
+    from uta.tasks.manager import TaskManager
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
+    manager.mark_running(task_id, stage="python_fix_compile", detail="child running")
+    class_row = manager.db.find_class_task(task_id, "pkg.A")
+    manager.db.update_class_task(
+        class_row["id"],
+        status="RUNNING",
+        stage="python_fix_compile",
+        current_stage="python_fix_compile",
     )
+    proc = SimpleNamespace(poll=lambda: None)
+    terminated = []
 
-    assert _probe_openai_auth_ready(StubClient(), "/tmp/repo") is False
+    def fake_terminate(child):
+        terminated.append(child)
 
+    monkeypatch.setattr("uta.app.task_daemon._terminate_daemon_child", fake_terminate)
 
-def test_probe_openai_auth_ready_raises_for_rate_limit(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
-    monkeypatch.setattr(
-        "uta.opencode.process.OpenCodeProcess.run_turn",
-        lambda self, message, model_id=None, repo_path=None, timeout=None: SimpleNamespace(
-            type="rate_limited",
-            result="",
-            error={"retry_after_seconds": 120, "provider_id": "openai", "model_id": "gpt-5.4"},
-        ),
-    )
+    requeued = _cleanup_daemon_pool({task_id: {"proc": proc}}, manager, reason="daemon exiting")
 
-    with pytest.raises(RuntimeError, match="rate limited"):
-        _probe_openai_auth_ready(StubClient(), "/tmp/repo")
+    assert terminated == [proc]
+    assert requeued == [task_id]
+    assert manager.get_task(task_id)["status"] == "QUEUED"
+    assert manager.db.find_class_task(task_id, "pkg.A")["status"] == "QUEUED"
 
 
-def test_probe_openai_auth_ready_with_retry_exhausts_all_attempts_then_raises(monkeypatch):
-    client = StubClient()
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
-    attempts_seen = []
-    monkeypatch.setattr(
-        "uta.cli._probe_openai_auth_ready",
-        lambda client, repo: attempts_seen.append(repo) or (_ for _ in ()).throw(RuntimeError("OpenAI readiness probe timed out before the model replied.")),
-    )
+def test_task_daemon_sigterm_drains_before_cleanup():
+    source = Path(__file__).resolve().parents[1].joinpath("uta", "app", "task_daemon.py").read_text(encoding="utf-8")
 
-    with pytest.MonkeyPatch.context() as mp:
-        import time
-        mp.setattr(time, "sleep", lambda x: None)
-        with pytest.raises(RuntimeError, match="timed out"):
-            _probe_openai_auth_ready_with_retry(client, "/tmp/repo", attempts=3)
-    assert attempts_seen == ["/tmp/repo", "/tmp/repo", "/tmp/repo"]
+    assert "shutdown_requested = False" in source
+    assert "Shutdown requested; draining running tasks before daemon exit" in source
+    assert "if shutdown_requested and not pool:" in source
+    assert "No running tasks remain; daemon exit is now safe" in source
+    assert "if not shutdown_requested and not batch_cap_reached():" in source
+    assert '_cleanup_daemon_pool(pool, manager, reason="daemon exiting")' in source
 
 
-def test_probe_openai_auth_ready_with_retry_raises_when_disconnected(monkeypatch):
-    client = StubClient()
-    client.providers = {"connected": []}
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
-    monkeypatch.setattr(
-        "uta.cli._probe_openai_auth_ready",
-        lambda client, repo: (_ for _ in ()).throw(RuntimeError("OpenAI readiness probe timed out before the model replied. The ChatGPT auth may be fine, but the confirmation turn was too slow.")),
-    )
+# The eight OpenCode readiness-probe tests that were here are gone with the code
+# they covered. UTA no longer knows how to probe a provider or how to read its
+# error payloads; it asks `check_harness_readiness` and acts on a normalised
+# answer. The behaviour did not disappear, it changed repositories, and
+# agent-core covers it case for case:
+#
+#   success                     -> test_a_confirming_reply_is_ready
+#   provider auth failure       -> test_a_provider_auth_error_is_authentication_required_and_is_not_retried
+#   invalid key                 -> test_an_invalid_key_api_error_is_authentication_required
+#   rate limit                  -> test_a_rate_limited_probe_is_unavailable_and_is_retried
+#   timeout                     -> test_a_timed_out_probe_is_unavailable_and_is_retried
+#   provider failure            -> test_a_provider_failure_is_unavailable_rather_than_authenticated
+#   three attempts, 3s/6s       -> test_readiness_retries_unavailable_three_times_with_the_uta_backoff
+#   recovery stops the retries  -> test_a_recovered_provider_stops_the_retries
+#
+# What remains UTA's -- the provider gate, the skip switch and the hard failure
+# -- is covered in tests/test_opencode_server_removal.py.
 
-    with pytest.MonkeyPatch.context() as mp:
-        import time
-        mp.setattr(time, "sleep", lambda x: None)
-        with pytest.raises(RuntimeError, match="OpenAI readiness probe timed out"):
-            _probe_openai_auth_ready_with_retry(client, "/tmp/repo", attempts=3)
 
 
-def test_probe_openai_auth_ready_with_retry_raises_rate_limit_even_when_connected(monkeypatch):
-    client = StubClient()
-    client.providers = {"connected": ["openai"]}
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
-    attempts_seen = []
-    monkeypatch.setattr(
-        "uta.cli._probe_openai_auth_ready",
-        lambda client, repo: attempts_seen.append(repo) or (_ for _ in ()).throw(RuntimeError("OpenAI readiness probe was rate limited by the provider/model. retry after 300s.")),
-    )
 
-    with pytest.MonkeyPatch.context() as mp:
-        import time
-        mp.setattr(time, "sleep", lambda x: None)
-        with pytest.raises(RuntimeError, match="rate limited"):
-            _probe_openai_auth_ready_with_retry(client, "/tmp/repo", attempts=3)
-    assert attempts_seen == ["/tmp/repo", "/tmp/repo", "/tmp/repo"]
+
+
+
+
+
+
+
+
+
+
+
 
 
 def test_configure_run_logging_creates_run_log(tmp_path):
@@ -626,7 +643,7 @@ public class ApiHelper {
 def test_query_index_finds_class_under_configured_source_dirs(tmp_path, monkeypatch):
     main_repo = tmp_path / "main-repo"
     main_repo.mkdir(parents=True, exist_ok=True)
-    configured_base = tmp_path / "services" / "api"
+    configured_base = tmp_path / "wms" / "api"
     _write_java(
         configured_base / "outbound-api" / "model" / "src" / "main" / "java" / "com" / "example" / "api" / "ConfiguredDto.java",
         """package com.example.api;
@@ -639,8 +656,8 @@ public class ConfiguredDto {
 """,
     )
     runner = CliRunner()
-    monkeypatch.setattr("uta.cli.settings.index_source_dirs", str(configured_base))
-    monkeypatch.setattr("uta.cli.settings.index_fetch_sources", False)
+    monkeypatch.setattr("uta.app.cli.settings.index_source_dirs", str(configured_base))
+    monkeypatch.setattr("uta.app.cli.settings.index_fetch_sources", False)
 
     result = runner.invoke(
         main,
@@ -691,9 +708,9 @@ public class ExternalDto {
     )
 
     runner = CliRunner()
-    monkeypatch.setattr("uta.cli.settings.index_source_dirs", "")
-    monkeypatch.setattr("uta.cli.settings.index_fetch_sources", False)
-    monkeypatch.setattr("uta.cli.settings.maven_settings_path", str(settings_xml))
+    monkeypatch.setattr("uta.app.cli.settings.index_source_dirs", "")
+    monkeypatch.setattr("uta.app.cli.settings.index_fetch_sources", False)
+    monkeypatch.setattr("uta.app.cli.settings.maven_settings_path", str(settings_xml))
 
     result = runner.invoke(
         main,
@@ -749,10 +766,10 @@ public class FetchedDto {
         return None
 
     runner = CliRunner()
-    monkeypatch.setattr("uta.cli.settings.index_source_dirs", "")
-    monkeypatch.setattr("uta.cli.settings.index_fetch_sources", True)
-    monkeypatch.setattr("uta.cli.settings.maven_settings_path", str(settings_xml))
-    monkeypatch.setattr("uta.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("uta.app.cli.settings.index_source_dirs", "")
+    monkeypatch.setattr("uta.app.cli.settings.index_fetch_sources", True)
+    monkeypatch.setattr("uta.app.cli.settings.maven_settings_path", str(settings_xml))
+    monkeypatch.setattr("uta.app.cli.subprocess.run", fake_run)
 
     result = runner.invoke(
         main,
@@ -795,12 +812,12 @@ def test_run_logs_pipeline_exception(monkeypatch, tmp_path, caplog):
         def display_summary(self, results, metadata=None):
             return None
 
-    monkeypatch.setattr("uta.graph.workflow.build_workflow", lambda: DummyWorkflow())
-    monkeypatch.setattr("uta.opencode.config.generate_opencode_config", lambda repo: tmp_path / "opencode.json")
-    monkeypatch.setattr("uta.opencode.client.OpenCodeClient", DummyClient)
-    monkeypatch.setattr("uta.output.reporter.Reporter", DummyReporter)
-    monkeypatch.setattr("uta.cli._ensure_model_auth", lambda repo: None)
-    monkeypatch.setattr("uta.cli._configure_run_logging", lambda repo, verbose: str(tmp_path / "run.log"))
+    monkeypatch.setattr("uta.testgen.graph.workflow.build_workflow", lambda: DummyWorkflow())
+    monkeypatch.setattr("agent_core.harness.config.generate_opencode_config", lambda repo: tmp_path / "opencode.json")
+    monkeypatch.setattr("agent_core.harness.client.OpenCodeClient", DummyClient)
+    monkeypatch.setattr("uta.reporting.Reporter", DummyReporter)
+    monkeypatch.setattr("uta.app.cli._ensure_model_auth", lambda repo: None)
+    monkeypatch.setattr("uta.app.cli._configure_run_logging", lambda repo, verbose: str(tmp_path / "run.log"))
 
     caplog.set_level(logging.ERROR, logger="uta")
     runner = CliRunner()
@@ -820,3 +837,58 @@ def test_run_logs_pipeline_exception(monkeypatch, tmp_path, caplog):
     record = next((r for r in caplog.records if r.message == "Pipeline failed during run execution"), None)
     assert record is not None
     assert record.exc_info is not None
+
+
+def test_python_run_generates_project_opencode_config(monkeypatch, tmp_path):
+    calls = []
+
+    class Target:
+        target_id = "pyfile:app.py"
+
+        def as_selection(self):
+            return {"target_id": self.target_id, "path": "app.py"}
+
+    class DummyReporter:
+        def __init__(self, repo):
+            self.repo = repo
+
+        def save_report(self, results, report_name, metadata=None):
+            calls.append(("save_report", report_name))
+
+        def display_summary(self, results, metadata=None):
+            calls.append(("display_summary", len(results)))
+
+    def fake_generate(repo):
+        calls.append(("generate_opencode_config", repo))
+        return tmp_path / "opencode.json"
+
+    def fake_run_batch_generation(request):
+        calls.append(("run_batch_generation", str(request.repo_path)))
+        return SimpleNamespace(
+            results={},
+            session_retrospect={},
+            session_token_usage={},
+        )
+
+    monkeypatch.setattr("uta.app.cli._python_targets_for_run", lambda *args, **kwargs: [Target()])
+    monkeypatch.setattr("uta.app.cli._configure_run_logging", lambda repo, verbose: str(tmp_path / "run.log"))
+    monkeypatch.setattr("agent_core.harness.config.generate_opencode_config", fake_generate)
+    monkeypatch.setattr("uta.testgen.runner.run_batch_generation", fake_run_batch_generation)
+    monkeypatch.setattr("uta.reporting.Reporter", DummyReporter)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "run",
+            "--repo",
+            str(tmp_path),
+            "--language",
+            "python",
+            "--target",
+            "app.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[0] == ("generate_opencode_config", str(tmp_path.resolve()))
+    assert calls[1] == ("run_batch_generation", str(tmp_path.resolve()))

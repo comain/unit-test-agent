@@ -1,8 +1,5 @@
 """E2E Phase 3: Measurability — provider_cost non-NULL, stage events, report CLI, dashboard."""
-import json
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
 
 
@@ -22,9 +19,8 @@ def _create_repo_task(mgr, tmp_path, name="repo"):
 
 @pytest.mark.e2e
 class TestProviderCostNonNull:
-    def test_provider_cost_estimated_when_missing(self, tmp_path):
-        """When stream has no explicit cost, provider_cost_usd must still be non-NULL."""
-        from uta.tasks.manager import TaskManager
+    def test_provider_cost_remains_unknown_when_provider_omits_it(self, tmp_path):
+        """Token counts must never be converted into a fictional provider charge."""
 
         mgr = _make_manager(tmp_path)
         tid = _create_repo_task(mgr, tmp_path)
@@ -44,7 +40,7 @@ class TestProviderCostNonNull:
                 "error": None,
             }
         }
-        # provider_cost is intentionally omitted (None) — sync_results should fallback
+        # provider_cost is intentionally omitted (None).
         try:
             mgr.sync_results(
                 tid,
@@ -60,7 +56,7 @@ class TestProviderCostNonNull:
         except Exception:
             pass  # May fail due to missing branch/config; we only care about cost column
 
-        # Check that class_tasks rows have non-NULL provider_cost_usd when tokens are present
+        # Tokens remain measurable while currency provenance stays unavailable.
         with mgr.db.connect() as conn:
             rows = conn.execute(
                 "SELECT class_fqn, provider_cost_usd FROM class_tasks WHERE repo_task_id=?",
@@ -68,8 +64,7 @@ class TestProviderCostNonNull:
             ).fetchall()
         for row in rows:
             if row["class_fqn"] == "com.A":
-                # Should have estimated cost from tokens
-                assert row["provider_cost_usd"] is not None, "provider_cost_usd must be non-NULL when tokens are known"
+                assert row["provider_cost_usd"] is None
 
 
 @pytest.mark.e2e
@@ -98,7 +93,7 @@ class TestStageEvents:
 @pytest.mark.e2e
 class TestReportCLI:
     def test_batch_report_runs_without_error(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         mgr = _make_manager(tmp_path)
         repo = tmp_path / "arepo"
@@ -106,7 +101,7 @@ class TestReportCLI:
         tid = mgr.create_task(repo_path=str(repo))
         mgr.db.update_repo_task(tid, status="COMPLETED", provider_cost_usd=2.0)
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             ["tasks", "report", "batch", "--task-db", str(tmp_path / "tasks.db"), "--json-output"],
@@ -115,7 +110,7 @@ class TestReportCLI:
         assert result.exit_code == 0
 
     def test_repo_report_returns_non_empty_json(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         mgr = _make_manager(tmp_path)
         repo = tmp_path / "myrepo2"
@@ -128,7 +123,7 @@ class TestReportCLI:
                 (tid,),
             )
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             ["tasks", "report", "repo", "myrepo2", "--task-db", str(tmp_path / "tasks.db"), "--json-output"],
@@ -141,14 +136,14 @@ class TestReportCLI:
 @pytest.mark.e2e
 class TestDashboard:
     def test_dashboard_renders_without_error(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         mgr = _make_manager(tmp_path)
         repo = tmp_path / "dashrepo"
         repo.mkdir()
         mgr.create_task(repo_path=str(repo))
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             ["tasks", "dashboard", "--once", "--task-db", str(tmp_path / "tasks.db")],
@@ -157,7 +152,7 @@ class TestDashboard:
         assert result.exit_code == 0
 
     def test_dashboard_shows_batch_header(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         mgr = _make_manager(tmp_path)
         repo = tmp_path / "dashrepo2"
@@ -165,7 +160,7 @@ class TestDashboard:
         mgr.create_task(repo_path=str(repo))
         mgr.db.update_repo_task(1, status="COMPLETED")
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             ["tasks", "dashboard", "--once", "--task-db", str(tmp_path / "tasks.db")],

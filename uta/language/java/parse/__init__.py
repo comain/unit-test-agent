@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from uta.engine.parse import ParsedCallable, ParsedImport, ParseDiagnostic, ParseProjectRequest
-from uta.engine.targets import TargetIdentity
+from uta.shared.parse import ParsedCallable, ParsedImport, ParseDiagnostic, ParseProjectRequest
+from uta.shared.targets import TargetIdentity
 from uta.language.java.parse.cache import CacheManager
 from uta.language.java.parse.graph_builder import GraphBuilder
 from uta.language.java.parse.java_parser import JavaParser

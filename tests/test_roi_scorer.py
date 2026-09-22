@@ -1,5 +1,4 @@
 """Tests for uta.language.java.scoring.coverage_roi."""
-import pytest
 from uta.language.java.parse.models import CodeGraph, GraphNode, GraphEdge
 from uta.language.java.scoring.coverage_roi import (
     ROI_SCORER_VERSION,

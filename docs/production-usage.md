@@ -165,3 +165,19 @@ Production runs enforce the two main safety boundaries from the hardening plan:
 - Successful class/batch commits are pushed immediately. Remote-ref mismatch or push failure is recorded as `PUSH_FAILED`.
 
 Deterministic UTA setup and reporting changes remain auditable task events and are not blocked by the LLM diff guard.
+
+## Test Quality Warnings (Advisory)
+
+Coverage and mutation gates remain the only pass/fail authority. UTA additionally scans selected/generated test files for weak patterns (non-null/size-only assertions, mock-call-count-only tests, implementation-mirroring expected values, happy-path-only files) and surfaces advisory warnings:
+
+- CI report: "Test quality signals" section (Python from structured target results; Java from repair fix-session summaries).
+- Repair progress: per-target warning column.
+- Local Python enforcement (`uta python-enforce`, dev-skills `uta_python_test_enforce.py`): a marker line when warnings exist —
+  `[test-enforcer] python test quality N advisory warning(s) top=<rule>xC (coverage/mutation gates unaffected)`.
+- `uta run` report JSON: `test_quality_warning_count` / `test_quality_top_rule` per target.
+
+The Java local dev-skills gate (`mvn verify`) does not involve uta and shows no warnings.
+
+## Spec Context For Generation Prompts
+
+`uta run --spec-context <path-or-text>` (or `specContext` on the API trigger request) injects externally supplied behavior rules — business thresholds, status transitions, refund windows — into the plan/generate prompts so expected values come from stated behavior instead of mirroring the implementation. A file path is read; anything else is inline text; content is bounded to 16 KB with a visible truncation marker. The content reaches LLM prompts and the repair context only; it is not written into CI reports or evidence payloads.

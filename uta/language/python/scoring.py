@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from uta.engine.scoring import TargetScoreResult
+from uta.shared.scoring import TargetScoreResult
 from uta.language.python.context_builder import PythonContextBuilder
-from uta.engine.targets import TargetRef
+from uta.shared.targets import TargetRef
 
 
 PYTHON_SCORER_VERSION = "2026-05-25-v1"

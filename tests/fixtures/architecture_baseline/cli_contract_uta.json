@@ -1,0 +1,2946 @@
+{
+  "commands": {
+    "assess": {
+      "commands": {},
+      "help": "Inspect bounded usage, timing, tools, patches, and diagnostic signals.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Optional baseline durable locator. Repeat to aggregate sessions.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "baseline_session_ids",
+          "opts": [
+            "--baseline-session-id"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Compatibility override for the configured harness diagnostics store.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "db_path",
+          "opts": [
+            "--db-path"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Neutral harness name that owns the locators.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "harness_name",
+          "opts": [
+            "--harness"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Print machine-readable JSON instead of rich tables.",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "json_output",
+          "opts": [
+            "--json-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Durable agent session locator. Repeat to aggregate sessions.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "session_ids",
+          "opts": [
+            "--session-id"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "enforce": {
+      "commands": {},
+      "help": "Resolve a language-aware enforcement request.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Enforcement backend name",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "backend",
+          "opts": [
+            "--backend"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Git base ref for incremental enforcement",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "base_ref",
+          "opts": [
+            "--base-ref"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Target coverage percentage",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "coverage_gate",
+          "opts": [
+            "--coverage-gate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "FloatParamType"
+        },
+        {
+          "help": "",
+          "hidden": true,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "dev_skills_launcher_version",
+          "opts": [
+            "--dev-skills-launcher-version"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Resolve language and targets without running the gate",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "dry_run",
+          "opts": [
+            "--dry-run"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Optional JSON evidence output file",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "evidence_output",
+          "opts": [
+            "--evidence-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Print machine-readable JSON",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "json_output",
+          "opts": [
+            "--json-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Project language: auto, java, or python",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "language",
+          "opts": [
+            "--language"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Target mutation score",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "mutation_gate",
+          "opts": [
+            "--mutation-gate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "FloatParamType"
+        },
+        {
+          "help": "Path to the repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Python syntax/runtime lane: python3 or python2",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "syntax_version",
+          "opts": [
+            "--syntax-version"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Language-neutral target. For Python use path.py or path.py::symbol.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "targets",
+          "opts": [
+            "--target"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Test path to run for Python enforcement. Repeat for multiple paths.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "test_paths",
+          "opts": [
+            "--test-path"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "parse": {
+      "commands": {},
+      "help": "Deep parse the module and cache code graph/flows.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Project language: auto, java, or python",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "language",
+          "opts": [
+            "--language"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Maximum Python production files to parse",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "max_files",
+          "opts": [
+            "--max-files"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Target Maven module name",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "module",
+          "opts": [
+            "--module"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Path to the repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        }
+      ],
+      "short_help": ""
+    },
+    "python-enforce": {
+      "commands": {},
+      "help": "Compatibility alias for Python enforcement routing.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Git base ref for incremental enforcement",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "base_ref",
+          "opts": [
+            "--base-ref"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Target coverage percentage",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "coverage_gate",
+          "opts": [
+            "--coverage-gate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "FloatParamType"
+        },
+        {
+          "help": "",
+          "hidden": true,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "dev_skills_launcher_version",
+          "opts": [
+            "--dev-skills-launcher-version"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Resolve language and targets without running the gate",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "dry_run",
+          "opts": [
+            "--dry-run"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Optional JSON evidence output file",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "evidence_output",
+          "opts": [
+            "--evidence-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Print machine-readable JSON",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "json_output",
+          "opts": [
+            "--json-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Target mutation score",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "mutation_gate",
+          "opts": [
+            "--mutation-gate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "FloatParamType"
+        },
+        {
+          "help": "Path to the Python repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Python syntax/runtime lane: python3 or python2",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "syntax_version",
+          "opts": [
+            "--syntax-version"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Python target path.py or path.py::symbol",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "targets",
+          "opts": [
+            "--target"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Test path to run. Repeat for multiple paths.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "test_paths",
+          "opts": [
+            "--test-path"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "python-mutant-diffs": {
+      "commands": {},
+      "help": "Precompute grouped Python mutmut survivor diffs for mutation repair.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Repair attempt used to select the split mutation group",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "attempt",
+          "opts": [
+            "--attempt"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Print machine-readable JSON",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "json_output",
+          "opts": [
+            "--json-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Representative mutmut show diffs per symbol",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "limit_per_symbol",
+          "opts": [
+            "--limit-per-symbol"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "IntParamType"
+        },
+        {
+          "help": "mutmut executable",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "mutmut_bin",
+          "opts": [
+            "--mutmut-bin"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Path to the Python repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "Path"
+        },
+        {
+          "help": "mutmut survivors.json path",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "survivors_path",
+          "opts": [
+            "--survivors"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Python target path or path.py::symbol",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "target",
+          "opts": [
+            "--target"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Focused pytest path used by mutmut runner",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "test_paths",
+          "opts": [
+            "--test-path"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "query-index": {
+      "commands": {},
+      "help": "Query the tree-sitter-derived class index without opening source files first.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Class FQN to inspect",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "class_fqn",
+          "opts": [
+            "--class-fqn"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Print machine-readable JSON",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "json_output",
+          "opts": [
+            "--json-output"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Project language: auto, java, or python",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "language",
+          "opts": [
+            "--language"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Per-section item cap",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "limit",
+          "opts": [
+            "--limit"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Optional exact method name filter",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "method_name",
+          "opts": [
+            "--method"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Target Maven module name",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "module",
+          "opts": [
+            "--module"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Path to the repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Section(s) to return. Repeat as needed. Defaults to summary.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "sections",
+          "opts": [
+            "--section"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Choice"
+        },
+        {
+          "help": "Optional exact symbol name filter",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "symbol",
+          "opts": [
+            "--symbol"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Language-neutral target. For Python use path.py or path.py::symbol.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "target",
+          "opts": [
+            "--target"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "run": {
+      "commands": {},
+      "help": "Run the full test generation pipeline.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Generation branch name.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "branch_name",
+          "opts": [
+            "--branch-name"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Number of classes to generate per OpenCode session (also: --batch-size; env UTA_CLASSES_PER_AGENT_RUN)",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "classes_per_run",
+          "opts": [
+            "--batch-size",
+            "--classes-per-run"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Target coverage percentage",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "coverage_gate",
+          "opts": [
+            "--coverage-gate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "FloatParamType"
+        },
+        {
+          "help": "Scan git log for last N days",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "days",
+          "opts": [
+            "--days"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Reuse an existing local generation branch without resetting local changes. Implies --branch-name.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "existing_branch",
+          "opts": [
+            "--existing-branch"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Explicit class FQN(s) to process. Repeat to bypass git-history candidate selection.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "explicit_class_fqns",
+          "opts": [
+            "--class-fqn"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Language-neutral target. For Python use path.py or path.py::symbol.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": true,
+          "name": "explicit_targets",
+          "opts": [
+            "--target"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Allow fixing production code bugs",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "fix_code",
+          "opts": [
+            "--fix-code"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Project language: auto, java, or python",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "language",
+          "opts": [
+            "--language"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Maximum files to process",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "max_files",
+          "opts": [
+            "--max-files"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Target Maven module name",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "module",
+          "opts": [
+            "--module"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Target mutation score",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "mutation_gate",
+          "opts": [
+            "--mutation-gate"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "FloatParamType"
+        },
+        {
+          "help": "Do not recreate/reset the generation branch. Intended for chaining calibration runs in the same worktree.",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "preserve_branch",
+          "opts": [
+            "--preserve-branch"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Record this run in the production task DB",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "production",
+          "opts": [
+            "--production"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Path to the repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Resume from a previous partial stop. Currently reuses latest_generation_plan.md and continues after planning.",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "resume",
+          "opts": [
+            "--resume"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Resume an existing repo task and run it",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "resume_task",
+          "opts": [
+            "--resume-task"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Use all production files instead of git-history ranking",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "select_all_files",
+          "opts": [
+            "--all"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        },
+        {
+          "help": "Optional behavior context for generation prompts: a text file path or inline text (bounded to 16 KB).",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "spec_context",
+          "opts": [
+            "--spec-context"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Stop the workflow immediately after the named stage. Supported checkpoints: plan_tests, generation.",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "stop_after_stage",
+          "opts": [
+            "--stop-after-stage"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "SQLite task DB path",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "task_db",
+          "opts": [
+            "--task-db"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "Run and update an existing repo task",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "task_id",
+          "opts": [
+            "--task-id"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Enable verbose logging",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "verbose",
+          "opts": [
+            "--verbose"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "scan": {
+      "commands": {},
+      "help": "Scan and list candidate files for test generation.",
+      "hidden": false,
+      "params": [
+        {
+          "help": "Scan git log for last N days",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "days",
+          "opts": [
+            "--days"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "IntParamType"
+        },
+        {
+          "help": "Project language: auto, java, or python",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "language",
+          "opts": [
+            "--language"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": true,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Target Maven module name",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "module",
+          "opts": [
+            "--module"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "StringParamType"
+        },
+        {
+          "help": "Path to the repository",
+          "hidden": false,
+          "is_flag": false,
+          "kind": "option",
+          "multiple": false,
+          "name": "repo",
+          "opts": [
+            "--repo"
+          ],
+          "required": true,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "Path"
+        },
+        {
+          "help": "List all production files instead of git-history ranking",
+          "hidden": false,
+          "is_flag": true,
+          "kind": "option",
+          "multiple": false,
+          "name": "select_all_files",
+          "opts": [
+            "--all"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "show_default": false,
+          "type": "BoolParamType"
+        }
+      ],
+      "short_help": ""
+    },
+    "tasks": {
+      "commands": {
+        "audit-generation-cutover": {
+          "commands": {},
+          "help": "Read-only pre-deploy audit for durable generation snapshots.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "cancel": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "reason",
+              "opts": [
+                "--reason"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "clean-rerun-generation": {
+          "commands": {},
+          "help": "Replace a confirmed corrupt or deliberately abandoned lineage.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Repeat TASK_ID to confirm potentially repeated model work",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "confirm_task_id",
+              "opts": [
+                "--confirm-task-id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "Requeue every child row, including passing rows",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "force_rerun_all",
+              "opts": [
+                "--force-rerun-all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Requeue failed child rows as well as unfinished rows",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "force_rerun_failed",
+              "opts": [
+                "--force-rerun-failed"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Required audit reason for replacing the workflow lineage",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "reason",
+              "opts": [
+                "--reason"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "create": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Base ref recorded for branch reuse",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "base_ref",
+              "opts": [
+                "--base-ref"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Explicit generation branch. Defaults to same-repo active branch reuse.",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "branch_name",
+              "opts": [
+                "--branch-name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Class FQN to include. Repeat for multiple classes.",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": true,
+              "name": "class_fqns",
+              "opts": [
+                "--class-fqn"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Target coverage percentage",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "coverage_gate",
+              "opts": [
+                "--coverage-gate"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Project language: auto, java, or python",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "language",
+              "opts": [
+                "--language"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Target Maven module name",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "module",
+              "opts": [
+                "--module"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Target mutation score",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "mutation_gate",
+              "opts": [
+                "--mutation-gate"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Force a new branch instead of reusing the active repo branch",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "new_branch",
+              "opts": [
+                "--new-branch"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Lower number runs first",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "priority",
+              "opts": [
+                "--priority"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "IntParamType"
+            },
+            {
+              "help": "Path to the repository",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "repo",
+              "opts": [
+                "--repo"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "Select all production classes during execution",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "select_all",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Language-neutral target. For Python use path.py or path.py::symbol.",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": true,
+              "name": "targets",
+              "opts": [
+                "--target"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "create-manifest": {
+          "commands": {},
+          "help": "Create tasks from a JSON manifest.\n\nAccepted shapes:\n{\"tasks\": [{\"repo\": \"<abs-path>\", \"module\": \"biz\", \"class_fqns\": [...], \"all\": false, \"priority\": 100}]}\nor a top-level list of the same task objects.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "JSON manifest with repo task definitions",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "manifest_path",
+              "opts": [
+                "--manifest"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "daemon": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Allow multiple active tasks for one repo",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "allow_same_repo_concurrency",
+              "opts": [
+                "--allow-same-repo-concurrency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Heartbeat interval in seconds",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "heartbeat_interval",
+              "opts": [
+                "--heartbeat-interval"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Allow daemon to retry FAILED repo tasks",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "include_failed",
+              "opts": [
+                "--include-failed"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Polling interval in seconds",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "interval",
+              "opts": [
+                "--interval",
+                "--poll-interval"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Max concurrent repo tasks (default: UTA_MAX_PARALLEL_REPOS or 1)",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "max_parallel",
+              "opts": [
+                "--max-parallel"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "Poll once and exit",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "once",
+              "opts": [
+                "--once"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "dashboard": {
+          "commands": {},
+          "help": "Live batch dashboard: active workers, queue depth, cost, throughput.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Refresh interval in seconds",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "interval",
+              "opts": [
+                "--interval"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Render once and exit",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "once",
+              "opts": [
+                "--once"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "enqueue": {
+          "commands": {},
+          "help": "Clone (or update) a repo and add it to the task queue.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Git branch to check out",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "branch",
+              "opts": [
+                "--branch"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "git_url",
+              "opts": [
+                "git_url"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Abort task when spend exceeds this USD amount",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "hard_cap_usd",
+              "opts": [
+                "--hard-cap-usd"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Project language: auto, java, or python",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "language",
+              "opts": [
+                "--language"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Target Maven module",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "module",
+              "opts": [
+                "--module"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "Task priority (lower = sooner)",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "priority",
+              "opts": [
+                "--priority"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "IntParamType"
+            },
+            {
+              "help": "Select all targets during execution",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "select_all",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Language-neutral target. For Python use path.py or path.py::symbol.",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": true,
+              "name": "targets",
+              "opts": [
+                "--target"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "export": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "fmt",
+              "opts": [
+                "--format"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "Choice"
+            },
+            {
+              "help": "Output file. Defaults to stdout.",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "output",
+              "opts": [
+                "--output"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "list": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "limit",
+              "opts": [
+                "--limit"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "IntParamType"
+            },
+            {
+              "help": "Filter by repo path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "repo",
+              "opts": [
+                "--repo"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "Filter by repo task status",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "status",
+              "opts": [
+                "--status"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "prune-workflows": {
+          "commands": {},
+          "help": "Delete eligible generation lineages through agent-core.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "older_than_days",
+              "opts": [
+                "--older-than-days"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "IntRange"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "report": {
+          "commands": {
+            "batch": {
+              "commands": {},
+              "help": "Print a batch summary of all tasks in the DB.",
+              "hidden": false,
+              "params": [
+                {
+                  "help": "Output JSON only",
+                  "hidden": false,
+                  "is_flag": true,
+                  "kind": "option",
+                  "multiple": false,
+                  "name": "json_output",
+                  "opts": [
+                    "--json-output"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "show_default": false,
+                  "type": "BoolParamType"
+                },
+                {
+                  "help": "SQLite task DB path",
+                  "hidden": false,
+                  "is_flag": false,
+                  "kind": "option",
+                  "multiple": false,
+                  "name": "task_db",
+                  "opts": [
+                    "--task-db"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "show_default": false,
+                  "type": "Path"
+                }
+              ],
+              "short_help": ""
+            },
+            "repo": {
+              "commands": {},
+              "help": "Print a per-class breakdown for a repo (matched by slug or path fragment).",
+              "hidden": false,
+              "params": [
+                {
+                  "help": "Output JSON only",
+                  "hidden": false,
+                  "is_flag": true,
+                  "kind": "option",
+                  "multiple": false,
+                  "name": "json_output",
+                  "opts": [
+                    "--json-output"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "show_default": false,
+                  "type": "BoolParamType"
+                },
+                {
+                  "help": "",
+                  "hidden": false,
+                  "is_flag": false,
+                  "kind": "argument",
+                  "multiple": false,
+                  "name": "slug",
+                  "opts": [
+                    "slug"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "show_default": false,
+                  "type": "StringParamType"
+                },
+                {
+                  "help": "SQLite task DB path",
+                  "hidden": false,
+                  "is_flag": false,
+                  "kind": "option",
+                  "multiple": false,
+                  "name": "task_db",
+                  "opts": [
+                    "--task-db"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "show_default": false,
+                  "type": "Path"
+                }
+              ],
+              "short_help": ""
+            }
+          },
+          "help": "Generate task reports.",
+          "hidden": false,
+          "params": [],
+          "short_help": ""
+        },
+        "reprioritize": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "priority_arg",
+              "opts": [
+                "priority_arg"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "New priority; lower runs first",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "priority_opt",
+              "opts": [
+                "--priority"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "reprioritize-class": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "class_task_id",
+              "opts": [
+                "class_task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "priority_arg",
+              "opts": [
+                "priority_arg"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "New priority; lower runs first",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "priority_opt",
+              "opts": [
+                "--priority"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "reprioritize-target": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "priority_arg",
+              "opts": [
+                "priority_arg"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "New priority; lower runs first",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "priority_opt",
+              "opts": [
+                "--priority"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "target_task_id",
+              "opts": [
+                "target_task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            }
+          ],
+          "short_help": ""
+        },
+        "resume": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Requeue every child row, including passing rows",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "force_rerun_all",
+              "opts": [
+                "--force-rerun-all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Requeue failed child rows as well as unfinished rows",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "force_rerun_failed",
+              "opts": [
+                "--force-rerun-failed"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "show": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Show all class rows instead of compact output",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "detail",
+              "opts": [
+                "--detail"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Show OpenCode session IDs",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "sessions",
+              "opts": [
+                "--sessions",
+                "--show-sessions"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Compatibility alias for --detail",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "show_classes",
+              "opts": [
+                "--show-classes"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "start": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Run the selected task immediately in this process",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "execute",
+              "opts": [
+                "--execute"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Allow --next to reacquire FAILED repo tasks",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "include_failed",
+              "opts": [
+                "--include-failed"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Acquire and execute the next queued task",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "start_next",
+              "opts": [
+                "--next"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "stop": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "reason",
+              "opts": [
+                "--reason"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "StringParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "summary": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Emit the task summary as JSON",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "unblock": {
+          "commands": {},
+          "help": "Reset a POISONED or BUDGET_EXCEEDED task to QUEUED.",
+          "hidden": false,
+          "params": [
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        },
+        "watch": {
+          "commands": {},
+          "help": "",
+          "hidden": false,
+          "params": [
+            {
+              "help": "Show all class rows instead of compact output",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "detail",
+              "opts": [
+                "--detail"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Refresh interval in seconds",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "interval",
+              "opts": [
+                "--interval"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": true,
+              "type": "FloatParamType"
+            },
+            {
+              "help": "Render once and exit",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "once",
+              "opts": [
+                "--once"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "Show OpenCode session IDs",
+              "hidden": false,
+              "is_flag": true,
+              "kind": "option",
+              "multiple": false,
+              "name": "sessions",
+              "opts": [
+                "--sessions",
+                "--show-sessions"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "BoolParamType"
+            },
+            {
+              "help": "SQLite task DB path",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "option",
+              "multiple": false,
+              "name": "task_db",
+              "opts": [
+                "--task-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "Path"
+            },
+            {
+              "help": "",
+              "hidden": false,
+              "is_flag": false,
+              "kind": "argument",
+              "multiple": false,
+              "name": "task_id",
+              "opts": [
+                "task_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "show_default": false,
+              "type": "IntParamType"
+            }
+          ],
+          "short_help": ""
+        }
+      },
+      "help": "Manage production UTA repo/class tasks.",
+      "hidden": false,
+      "params": [],
+      "short_help": ""
+    }
+  },
+  "help": "Unit Test Agent (uta) - Generate unit tests for legacy Java code.",
+  "hidden": false,
+  "params": [],
+  "short_help": ""
+}

@@ -1,5 +1,9 @@
 # Mutation ROI Prioritization
 
+> **Historical design record.** This captures the state and intent at the time it
+> was written; package paths and line references describe the tree as it was then.
+> For current structure see [design/architecture.md](../design/architecture.md).
+
 ## Context
 
 Commit `7dacfbe` introduced coverage ROI scoring — methods are ranked by `uncovered_lines / effort_score` so the LLM tackles cheap high-return methods first to hit the JaCoCo gate. Mutation testing still uses only a killability heuristic (`uta/maven/pitest.py:113-133`) that scores *likelihood to kill* per family but ignores *effort to write the killing test*. The result: the LLM often spends iterations on costly survivors (e.g. side-effect mutants on methods with 6+ collaborators or heavy async) before exhausting easy wins like boundary/conditional flips on pure methods.

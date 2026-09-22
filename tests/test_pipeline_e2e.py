@@ -4,11 +4,11 @@ End-to-end integration tests for the UTA pipeline.
 These tests run against a real Java Maven repo and exercise the pipeline (dry-run
 and optional OpenCode). Configure with:
 
-  - ``UTA_E2E_REPO`` — repo root (default: ``~/src/sample-service``)
+  - ``UTA_E2E_REPO`` — repo root (default: ``~/wms/sample-inbound-core``)
   - ``UTA_E2E_MODULE`` — Maven module name (default: infer; prefers ``biz``)
   - ``UTA_E2E_OUTBOUND_REPO`` — second repo for ``TestCrossRepo`` (default: outbound-core)
 
-Also see ``tests/test_cross_repo_smoke.py`` for ~/service_a and ~/service_b matrix.
+Also see ``tests/test_cross_repo_smoke.py`` for ~/platform and ~/tms matrix.
 
 Mark: pytest -m integration (markers can be added to slow tests)
 """
@@ -43,7 +43,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _keep_e2e_artifacts() -> bool:
-    from uta.config import settings as uta_settings
+    from uta.shared.config import settings as uta_settings
 
     return uta_settings.e2e_keep_artifacts
 
@@ -117,10 +117,10 @@ def clean_target_repo(monkeypatch):
 
 class TestGitScanning:
     def test_scan_finds_candidates(self):
-        from uta.engine.source_selection import get_changed_java_files
+        from uta.testgen.source_selection import get_changed_source_files
         # Use 1000 days — target repo may not have recent commits
         mod = E2E_MODULE or None
-        files = get_changed_java_files(REPO_PATH, 1000, mod)
+        files = get_changed_source_files("java", REPO_PATH, 1000, mod)
         assert len(files) > 0, "Should find changed Java files in last 1000 days"
         for path, count in files:
             assert path.endswith(".java")
@@ -128,9 +128,9 @@ class TestGitScanning:
             assert count > 0
 
     def test_scan_respects_module_filter(self):
-        from uta.engine.source_selection import get_changed_java_files
+        from uta.testgen.source_selection import get_changed_source_files
         mod = E2E_MODULE or None
-        files = get_changed_java_files(REPO_PATH, 1000, mod)
+        files = get_changed_source_files("java", REPO_PATH, 1000, mod)
         for path, _ in files:
             if E2E_MODULE:
                 assert f"{E2E_MODULE}/" in path
@@ -138,8 +138,8 @@ class TestGitScanning:
                 assert "src/main/java" in path
 
     def test_filter_limits_results(self):
-        from uta.engine.source_selection import get_changed_java_files, filter_files
-        files = get_changed_java_files(REPO_PATH, 90, E2E_MODULE or None)
+        from uta.testgen.source_selection import get_changed_source_files, filter_files
+        files = get_changed_source_files("java", REPO_PATH, 90, E2E_MODULE or None)
         filtered = filter_files(files, 1)
         assert len(filtered) <= 1
 
@@ -294,10 +294,11 @@ class TestContextBuilding:
 
 # ── Stage 6: Full pipeline (dry-run) ──────────────────────────────
 
+@pytest.mark.skip(reason="superseded by the durable staged-harness E2E")
 class TestFullPipeline:
     def test_pipeline_dry_run(self):
         """Run the full pipeline without OpenCode — should complete with SKIP status."""
-        from uta.graph.workflow import build_workflow
+        from uta.testgen.graph.workflow import build_workflow
 
         workflow_app = build_workflow()
         initial_state = {
@@ -334,8 +335,8 @@ class TestFullPipeline:
 
     def test_report_generated(self):
         """Run pipeline and verify report file is created."""
-        from uta.graph.workflow import build_workflow
-        from uta.output.reporter import Reporter
+        from uta.testgen.graph.workflow import build_workflow
+        from uta.reporting import Reporter
 
         workflow_app = build_workflow()
         initial_state = {
@@ -389,6 +390,7 @@ class TestFullPipeline:
 
 # ── Stage 7: Real run with OpenCode using the configured model ──────────────────────
 
+@pytest.mark.skip(reason="superseded by the durable staged-harness E2E")
 class TestRealRun:
     """Real E2E test that starts OpenCode with the configured model and generates tests.
 
@@ -405,10 +407,10 @@ class TestRealRun:
     @pytest.fixture(autouse=True)
     def setup_opencode(self):
         """Create a real process-based OpenCode session for integration tests."""
-        from uta.opencode.config import generate_opencode_config
-        from uta.opencode.client import OpenCodeClient
-        from uta.cli import _ensure_model_auth
-        from uta.config import settings as uta_settings
+        from agent_core.harness.config import generate_opencode_config
+        from agent_core.harness.client import OpenCodeClient
+        from uta.app.cli import _ensure_model_auth
+        from uta.shared.config import settings as uta_settings
 
         generate_opencode_config(REPO_PATH)
         try:
@@ -440,7 +442,7 @@ class TestRealRun:
 
     def test_opencode_responds(self):
         """Verify OpenCode can respond to a simple message using the selected model."""
-        from uta.config import settings as uta_settings
+        from uta.shared.config import settings as uta_settings
 
         self.client.send_message(
             self.session_id,
@@ -459,7 +461,7 @@ class TestRealRun:
 
     def test_real_pipeline_single_class(self):
         """Run the full pipeline with OpenCode on 1 class, minimal coverage gate."""
-        from uta.graph.workflow import build_workflow
+        from uta.testgen.graph.workflow import build_workflow
 
         workflow_app = build_workflow()
         initial_state = {
@@ -502,7 +504,7 @@ class TestRealRun:
             if res.get("test_file_content"):
                 print(f"\n--- Generated Test ({res['test_file_path']}) ---")
                 print(res["test_file_content"])
-                print(f"--- End Test ---")
+                print("--- End Test ---")
             else:
                 print("WARNING: No test file content captured")
             print(f"{'='*60}\n")
@@ -510,7 +512,7 @@ class TestRealRun:
 
     def test_real_pipeline_multi_class(self):
         """Run the pipeline on 3 classes — verify loop and no state leakage."""
-        from uta.graph.workflow import build_workflow
+        from uta.testgen.graph.workflow import build_workflow
 
         workflow_app = build_workflow()
         initial_state = {
@@ -554,7 +556,7 @@ class TestRealRun:
 
     def test_coverage_reported(self):
         """Run pipeline on 1 class and verify Jacoco coverage is non-zero."""
-        from uta.graph.workflow import build_workflow
+        from uta.testgen.graph.workflow import build_workflow
 
         workflow_app = build_workflow()
         initial_state = {
@@ -594,7 +596,7 @@ class TestRealRun:
 # ── Stage 8: Cross-repo validation (second Maven tree) ───────────
 
 SECONDARY_REPO = os.path.abspath(
-    os.path.expanduser(os.environ.get("UTA_E2E_OUTBOUND_REPO", "~/src/sample-service"))
+    os.path.expanduser(os.environ.get("UTA_E2E_OUTBOUND_REPO", "~/wms/sample-outbound-core"))
 )
 SECONDARY_MODULE_ARG = infer_java_module(
     SECONDARY_REPO,
@@ -612,6 +614,7 @@ SECONDARY_CLASS_FQN = (
     not os.path.isdir(SECONDARY_REPO),
     reason=f"Secondary E2E repo missing (set UTA_E2E_OUTBOUND_REPO): {SECONDARY_REPO}",
 )
+@pytest.mark.skip(reason="superseded by the durable staged-harness E2E")
 class TestCrossRepo:
     """Validate pipeline on a second repo (default outbound-core)."""
 
@@ -634,7 +637,7 @@ class TestCrossRepo:
 
     def test_outbound_dry_run(self):
         """Dry-run on secondary repo — verify parsing, filtering, and graph building."""
-        from uta.graph.workflow import build_workflow
+        from uta.testgen.graph.workflow import build_workflow
 
         workflow_app = build_workflow()
         initial_state = {
@@ -675,12 +678,12 @@ class TestCrossRepo:
     )
     def test_outbound_real_single_class(self):
         """Real E2E on secondary repo — 1 class with OpenCode using the selected model."""
-        from uta.opencode.server import OpenCodeServer
-        from uta.opencode.config import generate_opencode_config
-        from uta.opencode.client import OpenCodeClient
-        from uta.cli import _ensure_model_auth
-        from uta.config import settings as uta_settings
-        from uta.graph.workflow import build_workflow
+        from agent_core.harness.server import OpenCodeServer
+        from agent_core.harness.config import generate_opencode_config
+        from agent_core.harness.client import OpenCodeClient
+        from uta.app.cli import _ensure_model_auth
+        from uta.shared.config import settings as uta_settings
+        from uta.testgen.graph.workflow import build_workflow
 
         generate_opencode_config(SECONDARY_REPO)
         server = OpenCodeServer(SECONDARY_REPO)

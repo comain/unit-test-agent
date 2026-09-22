@@ -1,6 +1,15 @@
-import pytest
 import os
+from uta.language.java.parse import java_parser
 from uta.language.java.parse.java_parser import JavaParser
+
+
+def test_compile_query_supports_tree_sitter_without_language_query(monkeypatch):
+    language = object()
+    monkeypatch.setattr(java_parser, "Query", lambda lang, source: (lang, source))
+
+    compiled = java_parser._compile_query(language, "(identifier) @name")
+
+    assert compiled == (language, "(identifier) @name")
 
 def test_parse_sample_service(fixtures_dir):
     service_path = os.path.join(fixtures_dir, "SampleService.java")
@@ -46,7 +55,6 @@ def test_parse_sample_mapper(fixtures_dir):
     
     assert result.package == "com.example.mapper"
     
-    symbols = {s.fqn: s for s in result.symbols}
     # For interfaces, I should probably handle them in _traverse.
     # Currently _traverse handles class_declaration. Let's see if interface_declaration is needed.
     # In my java_parser.py, I only checked for class_declaration.

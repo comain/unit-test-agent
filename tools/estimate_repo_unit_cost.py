@@ -23,9 +23,9 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from uta.language.java.parse.graph_builder import GraphBuilder
 from uta.language.java.parse.java_parser import JavaParser
-from uta.graph.nodes import (
-    _is_accessor_like_method,
-    _is_testable_class,
+from uta.language.java.selection import (
+    is_accessor_like_method as _is_accessor_like_method,
+    is_testable_class as _is_testable_class,
 )
 
 OPENAI_GPT54_STANDARD_PRICING = {

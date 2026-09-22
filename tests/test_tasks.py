@@ -1,13 +1,27 @@
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
-from uta.cli import main
-from uta.tasks.manager import TaskManager, _estimate_cost_from_tokens
-from uta.tasks.render import build_status_payload, html_for_payload, write_live_status
+from uta.app.cli import main
+from uta.shared.config import settings
+from uta.tasks.manager import TaskManager
+from uta.tasks.render import build_status_payload, html_for_payload
 from uta.tasks.scheduler import TaskScheduler
+
+
+@pytest.fixture(autouse=True)
+def reset_opencode_model_health():
+    from agent_core.harness import tiered_router
+
+    tiered_router._tracker.reset()
+    tiered_router.reset_model_availability_cache()
+    yield
+    tiered_router._tracker.reset()
+    tiered_router.reset_model_availability_cache()
 
 
 def test_create_task_reuses_same_repo_branch(tmp_path):
@@ -25,6 +39,235 @@ def test_create_task_reuses_same_repo_branch(tmp_path):
     assert [row["class_fqn"] for row in manager.list_class_tasks(second_id)] == ["pkg.B"]
 
 
+def test_requeue_orphaned_running_task_with_stale_runner_heartbeat(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
+    manager.mark_running(task_id, stage="mutation_fix", detail="stale opencode turn")
+    class_row = manager.db.find_class_task(task_id, "pkg.A")
+    assert class_row is not None
+    manager.db.update_class_task(
+        class_row["id"],
+        status="RUNNING",
+        stage="mutation_fix",
+        current_stage="mutation_fix",
+        current_detail="stale opencode turn",
+    )
+    with manager.db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO runner_heartbeats(
+                runner_id, repo_task_id, current_repo_task_id, pid, hostname,
+                status, message, started_at, heartbeat_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "dead-host:123",
+                task_id,
+                task_id,
+                123,
+                "dead-host",
+                "RUNNING",
+                "task subprocess running",
+                "2026-06-12T07:00:00+00:00",
+                "2026-06-12T07:00:00+00:00",
+                "2026-06-12T07:00:00+00:00",
+                "2026-06-12T07:00:00+00:00",
+            ),
+        )
+
+    recovered = manager.requeue_orphaned_running_tasks(
+        active_task_ids=[],
+        stale_after_seconds=60,
+        now=datetime(2026, 6, 12, 7, 10, tzinfo=timezone.utc),
+    )
+
+    assert recovered == [task_id]
+    task = manager.get_task(task_id)
+    assert task["status"] == "QUEUED"
+    assert task["current_stage"] == "queued"
+    assert "stale runner heartbeat" in task["current_detail"]
+    class_row = manager.db.find_class_task(task_id, "pkg.A")
+    assert class_row["status"] == "QUEUED"
+    assert class_row["current_stage"] == "queued"
+    events = manager.db.latest_events(task_id, limit=5)
+    assert any(row["event_type"] == "orphaned_task_requeued" for row in events)
+
+
+def test_requeue_daemon_shutdown_task_marks_running_rows_queued(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
+    manager.mark_running(task_id, stage="python_fix_compile", detail="child running")
+    class_row = manager.db.find_class_task(task_id, "pkg.A")
+    manager.db.update_class_task(
+        class_row["id"],
+        status="RUNNING",
+        stage="python_fix_compile",
+        current_stage="python_fix_compile",
+        current_detail="child running",
+    )
+
+    recovered = manager.requeue_daemon_shutdown_tasks([task_id], reason="daemon exiting")
+
+    assert recovered == [task_id]
+    task = manager.get_task(task_id)
+    assert task["status"] == "QUEUED"
+    assert task["current_stage"] == "queued"
+    assert "daemon shutdown" in task["current_detail"]
+    class_row = manager.db.find_class_task(task_id, "pkg.A")
+    assert class_row["status"] == "QUEUED"
+    assert class_row["current_stage"] == "queued"
+    events = manager.db.latest_events(task_id, limit=5)
+    assert any(row["event_type"] == "daemon_shutdown_requeued" for row in events)
+
+
+def test_scheduler_can_probe_empty_queue_without_overwriting_active_heartbeat(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
+    scheduler = TaskScheduler(str(tmp_path / "tasks.db"), runner_id="runner-1")
+
+    assert scheduler.acquire_next()["id"] == task_id
+    assert scheduler.acquire_next(record_idle_heartbeat=False) is None
+
+    heartbeat = manager.db.latest_heartbeat()
+    assert heartbeat["runner_id"] == "runner-1"
+    assert heartbeat["status"] == "RUNNING"
+    assert heartbeat["current_repo_task_id"] == task_id
+
+
+def test_scheduler_does_not_reacquire_task_already_in_daemon_pool(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
+    scheduler = TaskScheduler(str(manager.db.path), runner_id="host:daemon")
+
+    first = scheduler.acquire_next()
+    assert first["id"] == task_id
+
+    # Provider fallback may queue the same task before its current subprocess exits.
+    manager.db.update_repo_task(task_id, status="QUEUED", current_stage="provider_fallback")
+
+    assert scheduler.acquire_next(exclude_task_ids={task_id}) is None
+    assert manager.get_task(task_id)["status"] == "QUEUED"
+
+
+def test_duplicate_repair_identity_ignores_rdc_run_id_and_workspace(tmp_path):
+    repo_a = tmp_path / "workspace-a" / "demo"
+    repo_b = tmp_path / "workspace-b" / "demo"
+    repo_a.mkdir(parents=True)
+    repo_b.mkdir(parents=True)
+    manager = TaskManager(tmp_path / "tasks.db")
+
+    def create_repair(repo_path: Path, task_id: str) -> int:
+        return manager.create_task(
+            repo_path=str(repo_path),
+            class_fqns=["pkg.A"],
+            branch_name="feature/TASK-1",
+            base_ref="origin/master",
+            quality_mode="ci_incremental",
+            quality_gate_backend="test_enforcer",
+            rdc_context={
+                "pipeline": {
+                    "taskId": task_id,
+                    "gitUrl": "git@git.example.com:group/demo.git",
+                    "appName": "demo",
+                }
+            },
+        )
+
+    first_id = create_repair(repo_a, "rdc-run-1")
+    second_id = create_repair(repo_b, "rdc-run-2")
+
+    assert manager.find_active_duplicate_repair_task(second_id) == first_id
+    assert (
+        manager.find_active_duplicate_repair_task_for_targets(
+            repo_identity="git@git.example.com:group/demo.git",
+            branch_name="feature/TASK-1",
+            base_ref="origin/master",
+            language="java",
+            quality_gate_backend="test_enforcer",
+            target_ids=["pkg.A"],
+        )
+        == first_id
+    )
+
+
+def test_duplicate_repair_reuses_active_superset_targets(tmp_path):
+    repo_a = tmp_path / "workspace-a" / "demo"
+    repo_b = tmp_path / "workspace-b" / "demo"
+    repo_a.mkdir(parents=True)
+    repo_b.mkdir(parents=True)
+    manager = TaskManager(tmp_path / "tasks.db")
+
+    def create_repair(repo_path: Path, targets: list[str]) -> int:
+        return manager.create_task_targets(
+            repo_path=str(repo_path),
+            targets=[
+                {
+                    "target_id": target,
+                    "display_name": target.removeprefix("pyfile:"),
+                    "source_path": target.removeprefix("pyfile:"),
+                    "language": "python",
+                    "granularity": "file",
+                }
+                for target in targets
+            ],
+            language="python",
+            branch_name="feature/TASK-1",
+            base_ref="origin/master",
+            quality_mode="ci_incremental",
+            quality_gate_backend="python_enforcer",
+            rdc_context={
+                "pipeline": {
+                    "taskId": "same-rdc-task",
+                    "gitUrl": "git@git.example.com:group/demo.git",
+                    "appName": "demo",
+                }
+            },
+        )
+
+    first_id = create_repair(
+        repo_a,
+        [
+            "pyfile:pipecat/main.py",
+            "pyfile:pipecat/router/router.py",
+            "pyfile:pipecat/security/config.py",
+        ],
+    )
+    subset_id = create_repair(
+        repo_b,
+        [
+            "pyfile:pipecat/router/router.py",
+            "pyfile:pipecat/security/config.py",
+        ],
+    )
+    unrelated_id = create_repair(repo_b, ["pyfile:pipecat/llm/intent_classifier.py"])
+
+    assert manager.find_active_duplicate_repair_task(subset_id) == first_id
+    assert manager.find_active_duplicate_repair_task(unrelated_id) is None
+    assert (
+        manager.find_active_duplicate_repair_task_for_targets(
+            repo_identity="git@git.example.com:group/demo.git",
+            branch_name="feature/TASK-1",
+            base_ref="origin/master",
+            language="python",
+            quality_gate_backend="python_enforcer",
+            target_ids=[
+                "pyfile:pipecat/router/router.py",
+                "pyfile:pipecat/security/config.py",
+            ],
+        )
+        == first_id
+    )
+
+
 def test_create_task_can_force_new_branch(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -34,131 +277,6 @@ def test_create_task_can_force_new_branch(tmp_path):
     second_id = manager.create_task(repo_path=str(repo), new_branch=True)
 
     assert manager.get_task(first_id)["branch_name"] != manager.get_task(second_id)["branch_name"]
-
-
-def test_create_task_records_opencode_routing_metadata_without_tokens(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    monkeypatch.setattr(
-        "uta.tasks.manager.settings.opencode_provider_chain",
-        "token-pool:token-pool/gpt-5.5;openai:openai/gpt-5.4",
-    )
-    monkeypatch.setattr(
-        "uta.tasks.manager.settings.opencode_provider_tokens",
-        "token-pool.token=tp-secret;openai.token=openai-secret",
-    )
-    monkeypatch.setattr("uta.tasks.manager.settings.opencode_provider_base_urls", "")
-    monkeypatch.setattr("uta.tasks.manager.settings.opencode_provider_fallback_enabled", False)
-
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
-
-    task = manager.get_task(task_id)
-    snapshot = json.loads(task["config_snapshot_json"])
-    assert snapshot["opencode_selected_provider"] == "token-pool"
-    assert snapshot["opencode_selected_model"] == "token-pool/gpt-5.5"
-    assert snapshot["opencode_candidate_index"] == 0
-    assert snapshot["opencode_provider_chain"] == [
-        {"provider": "token-pool", "models": ["token-pool/gpt-5.5"]},
-        {"provider": "openai", "models": ["openai/gpt-5.4"]},
-    ]
-    assert snapshot["opencode_provider_tokens"] == {
-        "token-pool": "configured",
-        "openai": "configured",
-    }
-    serialized = json.dumps(snapshot)
-    assert "tp-secret" not in serialized
-    assert "openai-secret" not in serialized
-    events = manager.db.latest_events(task_id, limit=20)
-    assert any(row["event_type"] == "opencode_model_selected" for row in events)
-
-
-def test_create_task_selects_first_available_opencode_candidate(tmp_path, monkeypatch):
-    from uta.opencode.tiered_router import ProviderCandidate
-
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    monkeypatch.setattr(
-        "uta.tasks.manager.settings.opencode_provider_chain",
-        "token-pool:token-pool/gpt-5.5,token-pool/gpt-5.4;openai:openai/gpt-5.4",
-    )
-    monkeypatch.setattr("uta.tasks.manager.settings.opencode_provider_fallback_enabled", True)
-    monkeypatch.setattr(
-        "uta.tasks.manager.available_provider_candidates",
-        lambda *, fallback_enabled=None: [
-            ProviderCandidate("openai", "openai/gpt-5.4", 2)
-        ],
-    )
-
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
-
-    snapshot = json.loads(manager.get_task(task_id)["config_snapshot_json"])
-    assert snapshot["opencode_selected_provider"] == "openai"
-    assert snapshot["opencode_selected_model"] == "openai/gpt-5.4"
-    assert snapshot["opencode_candidate_index"] == 2
-    assert snapshot["opencode_model_probe"]["status"] == "checked"
-
-
-def test_provider_fallback_stop_resume_selects_next_candidate(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    monkeypatch.setattr(
-        "uta.tasks.manager.settings.opencode_provider_chain",
-        "token-pool:token-pool/gpt-5.5;openai:openai/gpt-5.4",
-    )
-    monkeypatch.setattr("uta.tasks.manager.settings.opencode_provider_fallback_enabled", True)
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
-
-    manager.stop_and_resume_for_provider_fallback(
-        task_id,
-        provider="token-pool",
-        model="token-pool/gpt-5.5",
-        candidate_index=0,
-        reason="rate_limit",
-        phase="generate",
-        retry_after_seconds=120,
-    )
-
-    task = manager.get_task(task_id)
-    snapshot = json.loads(task["config_snapshot_json"])
-    assert task["status"] == "QUEUED"
-    assert task["resume_count"] == 1
-    assert snapshot["opencode_selected_provider"] == "openai"
-    assert snapshot["opencode_selected_model"] == "openai/gpt-5.4"
-    assert snapshot["opencode_fallback_history"][-1]["reason"] == "rate_limit"
-    events = [row["event_type"] for row in manager.db.latest_events(task_id, limit=20)]
-    assert "opencode_model_unavailable" in events
-    assert "opencode_provider_fallback_stop" in events
-    assert "opencode_provider_fallback_resume" in events
-
-
-def test_provider_fallback_exhaustion_fails_task_without_loop(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    monkeypatch.setattr(
-        "uta.tasks.manager.settings.opencode_provider_chain",
-        "token-pool:token-pool/gpt-5.5",
-    )
-    monkeypatch.setattr("uta.tasks.manager.settings.opencode_provider_fallback_enabled", True)
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
-
-    manager.stop_and_resume_for_provider_fallback(
-        task_id,
-        provider="token-pool",
-        model="token-pool/gpt-5.5",
-        candidate_index=0,
-        reason="rate_limit",
-        phase="generate",
-    )
-
-    task = manager.get_task(task_id)
-    assert task["status"] == "FAILED"
-    assert "No OpenCode provider candidates remain" in task["last_error"]
-    events = [row["event_type"] for row in manager.db.latest_events(task_id, limit=20)]
-    assert "opencode_provider_fallback_exhausted" in events
 
 
 def test_scheduler_acquires_by_priority_and_blocks_same_repo(tmp_path):
@@ -268,16 +386,110 @@ def test_sync_results_and_live_status_include_sessions(tmp_path):
     assert payload["task"]["input_tokens"] == 10
     assert payload["metrics"]["cache_hit_ratio"] > 0
     assert payload["latest_heartbeat"]["runner_id"] == "runner-1"
-    assert payload["metrics"]["remaining_estimated_tokens"] is not None
+    assert payload["metrics"]["remaining_estimated_tokens"] is None
     assert payload["task"]["config_snapshot_hash"]
     assert payload["classes"][0]["test_count"] == 2
     assert payload["classes"][0]["session_ids"] == ["ses_1", "ses_2"]
-    assert payload["task"]["session_ids"] == ["ses_1", "ses_2"]
-    assert "ses_1" in html_for_payload(payload)
-    paths = write_live_status(manager.db, task_id, repo_path=str(repo))
-    assert Path(paths["json"]).exists()
-    assert Path(paths["html"]).exists()
-    assert json.loads(Path(paths["json"]).read_text())["task"]["id"] == task_id
+
+
+def test_sync_results_exposes_test_quality_warnings_in_status_payload(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task_targets(
+        repo_path=str(repo),
+        targets=[
+            {
+                "target_id": "pyfile:pkg.py",
+                "display_name": "pkg.py",
+                "source_path": "pkg.py",
+                "language": "python",
+                "granularity": "file",
+            }
+        ],
+        language="python",
+    )
+    manager.mark_running(task_id)
+
+    manager.sync_results(
+        task_id,
+        {
+            "pyfile:pkg.py": {
+                "language": "python",
+                "status": "PASS",
+                "line_coverage": 100.0,
+                "mutation_score": 100.0,
+                "testQuality": {
+                    "warningCount": 1,
+                    "warnings": [
+                        {
+                            "ruleId": "python-weak-assert-not-none",
+                            "message": "Primary assertions only check existence.",
+                            "filePath": "tests/test_pkg.py",
+                            "line": 7,
+                        }
+                    ],
+                },
+            }
+        },
+    )
+
+    payload = build_status_payload(manager.db, task_id)
+    row = payload["classes"][0]
+
+    assert row["test_quality"]["warningCount"] == 1
+    assert row["test_quality_warning"] == "python-weak-assert-not-none: Primary assertions only check existence."
+    assert "python-weak-assert-not-none" in html_for_payload(payload)
+
+
+def test_sync_results_marks_hard_capped_python_mutation_display(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task_targets(
+        repo_path=str(repo),
+        targets=[
+            {
+                "target_id": "pyfile:pkg.py",
+                "display_name": "pkg.py",
+                "source_path": "pkg.py",
+                "language": "python",
+                "granularity": "file",
+            }
+        ],
+        language="python",
+    )
+    manager.mark_running(task_id)
+
+    manager.sync_results(
+        task_id,
+        {
+            "pyfile:pkg.py": {
+                "language": "python",
+                "status": "PASS",
+                "line_coverage": 100.0,
+                "mutation_score": 84.0954,
+                "mutation_summary": {
+                    "candidatePlan": {
+                        "generationPolicy": {
+                            "truncated": True,
+                            "omittedByCap": 42,
+                            "caps": {"maxSelected": 100},
+                            "selectedOpportunities": 100,
+                        }
+                    }
+                },
+            }
+        },
+    )
+
+    row = manager.list_class_tasks(task_id)[0]
+    payload = build_status_payload(manager.db, task_id)
+
+    assert row["mutation_score"] == 84.0954
+    assert row["mutation_detail"] == "84.0954(hard capped 100)"
+    assert payload["classes"][0]["mutation_display"] == "84.0954(hard capped 100)"
+    assert "84.0954(hard capped 100)" in html_for_payload(payload)
 
 
 def test_sync_results_merges_resume_sessions_and_tokens(tmp_path):
@@ -324,7 +536,7 @@ def test_sync_results_merges_resume_sessions_and_tokens(tmp_path):
     assert task["input_tokens"] == 30
     assert task["cache_read_tokens"] == 12
     assert task["total_tokens"] == 50
-    assert abs(float(task["actual_cost"]) - 0.000198) < 0.000001
+    assert task["actual_cost"] is None
 
 
 def test_sync_results_marks_repo_failed_when_setup_fails_before_class_tasks(tmp_path):
@@ -358,7 +570,8 @@ def test_status_payload_prefers_actual_cost_when_provider_cost_is_zero(tmp_path)
 
     payload = build_status_payload(manager.db, task_id)
     assert payload["metrics"]["actual_cost"] == 1.25
-    assert abs(float(payload["metrics"]["budget_used_pct"]) - 6.25) < 0.000001
+    expected_budget_pct = (1.25 / (10.0 * float(settings.budget_hard_cap_multiplier))) * 100.0
+    assert abs(float(payload["metrics"]["budget_used_pct"]) - expected_budget_pct) < 0.000001
 
 
 def test_sync_results_splits_shared_batch_tokens_across_classes(tmp_path):
@@ -390,237 +603,6 @@ def test_sync_results_splits_shared_batch_tokens_across_classes(tmp_path):
     assert classes["pkg.A"]["output_tokens"] == 3
     assert classes["pkg.B"]["output_tokens"] == 2
     assert classes["pkg.A"]["phase_token_usage_json"]
-
-
-def test_sync_results_uses_opencode_db_recovery_when_tokens_still_missing(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
-    called = {}
-
-    def _fake_recover(repo_task_id, *, class_fqns=None, opencode_db_path=None):
-        called["repo_task_id"] = repo_task_id
-        called["class_fqns"] = list(class_fqns or [])
-        row = manager.list_class_tasks(repo_task_id)[0]
-        manager.db.update_class_task(
-            row["id"],
-            input_tokens=12,
-            output_tokens=3,
-            cache_read_tokens=4,
-            reasoning_tokens=1,
-            total_tokens=20,
-        )
-        return 1
-
-    monkeypatch.setattr(manager, "recover_missing_class_tokens_from_opencode_db", _fake_recover)
-
-    manager.sync_results(
-        task_id,
-        {"pkg.A": {"status": "PASS", "session_ids": ["ses_1"]}},
-        session_token_usage={},
-        phase_token_usage={},
-    )
-
-    assert called == {"repo_task_id": task_id, "class_fqns": ["pkg.A"]}
-    row = manager.list_class_tasks(task_id)[0]
-    assert row["input_tokens"] == 12
-    assert row["total_tokens"] == 20
-
-
-def test_sync_results_backfills_missing_class_tokens_even_when_repo_has_prior_totals(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A", "pkg.B"])
-
-    manager.sync_results(
-        task_id,
-        {
-            "pkg.A": {
-                "status": "PASS",
-                "session_ids": ["ses_old"],
-                "phase_token_usage": {
-                    "plan": {"input": 10, "output": 2, "cache_read": 5, "cache_write": 0, "reasoning": 1}
-                },
-            }
-        },
-    )
-
-    manager.sync_results(
-        task_id,
-        {
-            "pkg.B": {
-                "status": "PASS",
-                "session_ids": ["ses_new"],
-            }
-        },
-        phase_token_usage={
-            "generate": {"input": 20, "output": 3, "cache_read": 7, "cache_write": 0, "reasoning": 2}
-        },
-    )
-
-    payload = build_status_payload(manager.db, task_id)
-    classes = {row["class_fqn"]: row for row in payload["classes"]}
-    assert classes["pkg.A"]["input_tokens"] == 10
-    assert classes["pkg.B"]["input_tokens"] == 20
-    assert classes["pkg.B"]["output_tokens"] == 3
-    assert classes["pkg.B"]["cache_read_tokens"] == 7
-    assert classes["pkg.B"]["reasoning_tokens"] == 2
-    assert classes["pkg.B"]["total_tokens"] == 32
-
-
-def test_recover_missing_class_tokens_from_opencode_db(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.ReceiptActor"])
-    class_id = manager.list_class_tasks(task_id)[0]["id"]
-    manager.db.update_class_task(
-        class_id,
-        status="PASS",
-        current_stage="finished",
-        stage="finished",
-        started_at="2026-04-29T07:40:00+00:00",
-        finished_at="2026-04-29T07:50:00+00:00",
-        updated_at="2026-04-29T07:50:00+00:00",
-    )
-
-    opencode_db = tmp_path / "opencode.db"
-    conn = sqlite3.connect(opencode_db)
-    try:
-        conn.execute(
-            "create table session(id text, directory text, title text, time_created integer)"
-        )
-        conn.execute(
-            "create table message(id text, session_id text, time_created integer, data text)"
-        )
-        conn.execute(
-            "insert into session(id, directory, title, time_created) values (?, ?, ?, ?)",
-            ("ses-plan", str(repo), "JUnit 4 test plan for ReceiptActor", 1777458300000),
-        )
-        conn.execute(
-            "insert into session(id, directory, title, time_created) values (?, ?, ?, ?)",
-            ("ses-gen", str(repo), "JUnit 4 test for ReceiptActor", 1777458600000),
-        )
-        assistant_payload = {
-            "info": {
-                "role": "assistant",
-                "tokens": {
-                    "input": 10,
-                    "output": 2,
-                    "reasoning": 1,
-                    "total": 17,
-                    "cache": {"read": 4, "write": 0},
-                },
-            }
-        }
-        conn.execute(
-            "insert into message(id, session_id, time_created, data) values (?, ?, ?, ?)",
-            ("m1", "ses-plan", 1777458301000, json.dumps(assistant_payload)),
-        )
-        assistant_payload_2 = {
-            "info": {
-                "role": "assistant",
-                "tokens": {
-                    "input": 20,
-                    "output": 3,
-                    "reasoning": 2,
-                    "total": 32,
-                    "cache": {"read": 7, "write": 0},
-                },
-            }
-        }
-        conn.execute(
-            "insert into message(id, session_id, time_created, data) values (?, ?, ?, ?)",
-            ("m2", "ses-gen", 1777458601000, json.dumps(assistant_payload_2)),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    updated = manager.recover_missing_class_tokens_from_opencode_db(
-        task_id,
-        class_fqns=["pkg.ReceiptActor"],
-        opencode_db_path=opencode_db,
-    )
-    assert updated == 1
-
-    payload = build_status_payload(manager.db, task_id)
-    cls = payload["classes"][0]
-    assert cls["session_ids"] == ["ses-plan", "ses-gen"]
-    assert cls["input_tokens"] == 30
-    assert cls["output_tokens"] == 5
-    assert cls["cache_read_tokens"] == 11
-    assert cls["reasoning_tokens"] == 3
-    assert cls["total_tokens"] == 49
-
-
-def test_recover_missing_class_tokens_preserves_existing_repo_provider_cost(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.ReceiptActor"])
-    class_id = manager.list_class_tasks(task_id)[0]["id"]
-    manager.db.update_repo_task(task_id, provider_cost_usd=2.5, actual_cost=2.5)
-    manager.db.update_class_task(
-        class_id,
-        status="PASS",
-        current_stage="finished",
-        stage="finished",
-        started_at="2026-04-29T07:40:00+00:00",
-        finished_at="2026-04-29T07:50:00+00:00",
-        updated_at="2026-04-29T07:50:00+00:00",
-    )
-
-    opencode_db = tmp_path / "opencode.db"
-    conn = sqlite3.connect(opencode_db)
-    try:
-        conn.execute(
-            "create table session(id text, directory text, title text, time_created integer)"
-        )
-        conn.execute(
-            "create table message(id text, session_id text, time_created integer, data text)"
-        )
-        conn.execute(
-            "insert into session(id, directory, title, time_created) values (?, ?, ?, ?)",
-            ("ses-plan", str(repo), "JUnit 4 test plan for ReceiptActor", 1777458300000),
-        )
-        conn.execute(
-            "insert into message(id, session_id, time_created, data) values (?, ?, ?, ?)",
-            (
-                "m1",
-                "ses-plan",
-                1777458301000,
-                json.dumps(
-                    {
-                        "info": {
-                            "role": "assistant",
-                            "tokens": {
-                                "input": 10,
-                                "output": 2,
-                                "reasoning": 1,
-                                "total": 17,
-                                "cache": {"read": 4, "write": 0},
-                            },
-                        }
-                    }
-                ),
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    updated = manager.recover_missing_class_tokens_from_opencode_db(
-        task_id,
-        class_fqns=["pkg.ReceiptActor"],
-        opencode_db_path=opencode_db,
-    )
-    assert updated == 1
-    task = manager.get_task(task_id)
-    assert float(task["provider_cost_usd"]) == 2.5
-    assert float(task["actual_cost"]) > 0.0
 
 
 def test_tasks_cli_create_list_show_watch(tmp_path):
@@ -696,112 +678,6 @@ def test_tasks_cli_watch_compacts_large_class_lists_unless_detail(tmp_path):
     assert "pkg.C029" in detailed.output
 
 
-def test_build_task_summary_cross_verifies_tokens_with_opencode_db(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    manager = TaskManager(tmp_path / "tasks.db")
-    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A", "pkg.B"], config_snapshot={"opencode_model": "gpt-5.4"})
-    rows = {row["class_fqn"]: row for row in manager.list_class_tasks(task_id)}
-    manager.db.update_class_task(
-        rows["pkg.A"]["id"],
-        status="PASS",
-        stage="finished",
-        current_stage="finished",
-        coverage_line=80.0,
-        mutation_score=70.0,
-        total_mutants=10,
-        surviving_mutants=3,
-        test_file_path="src/test/java/pkg/ATest.java",
-        module="",
-        input_tokens=0,
-        output_tokens=0,
-        cache_read_tokens=0,
-        reasoning_tokens=0,
-        total_tokens=0,
-        started_at="2026-05-01T00:00:00+00:00",
-        finished_at="2026-05-01T00:10:00+00:00",
-    )
-    manager.db.update_class_task(
-        rows["pkg.B"]["id"],
-        status="PASS",
-        stage="finished",
-        current_stage="finished",
-        coverage_line=100.0,
-        mutation_score=90.0,
-        total_mutants=20,
-        surviving_mutants=2,
-        test_file_path="src/test/java/pkg/BTest.java",
-        module="",
-        input_tokens=40,
-        output_tokens=4,
-        cache_read_tokens=8,
-        reasoning_tokens=2,
-        total_tokens=54,
-        session_ids_json=json.dumps(["ses-b"]),
-        started_at="2026-05-01T00:10:00+00:00",
-        finished_at="2026-05-01T00:20:00+00:00",
-    )
-    manager.db.update_repo_task(
-        task_id,
-        status="COMPLETED",
-        started_at="2026-05-01T00:00:00+00:00",
-        finished_at="2026-05-01T00:20:00+00:00",
-    )
-
-    opencode_db = tmp_path / "opencode.db"
-    conn = sqlite3.connect(opencode_db)
-    try:
-        conn.execute("create table session(id text, directory text, title text, time_created integer)")
-        conn.execute("create table message(id text, session_id text, time_created integer, data text)")
-        conn.execute(
-            "insert into session(id, directory, title, time_created) values (?, ?, ?, ?)",
-            ("ses-a", str(repo), "JUnit 4 test for A", 1746057600000),
-        )
-        conn.execute(
-            "insert into session(id, directory, title, time_created) values (?, ?, ?, ?)",
-            ("ses-b", str(repo), "JUnit 4 test for B", 1746058200000),
-        )
-        for session_id, payload in (
-            (
-                "ses-a",
-                {"info": {"role": "assistant", "tokens": {"input": 30, "output": 3, "reasoning": 1, "total": 39, "cache": {"read": 5, "write": 0}}}},
-            ),
-            (
-                "ses-b",
-                {"info": {"role": "assistant", "tokens": {"input": 40, "output": 4, "reasoning": 2, "total": 54, "cache": {"read": 8, "write": 0}}}},
-            ),
-        ):
-            conn.execute(
-                "insert into message(id, session_id, time_created, data) values (?, ?, ?, ?)",
-                (f"m-{session_id}", session_id, 1746057601000, json.dumps(payload)),
-            )
-        conn.commit()
-    finally:
-        conn.close()
-
-    monkeypatch.setattr("uta.tasks.manager.run_tests_with_jacoco_batch", lambda *args, **kwargs: (True, "ok"))
-    monkeypatch.setattr("uta.tasks.manager.find_jacoco_report", lambda *args, **kwargs: str(opencode_db))
-    monkeypatch.setattr(
-        "uta.tasks.manager.parse_jacoco_line_coverage_for_classes",
-        lambda *args, **kwargs: {"line": 84.0, "covered_lines": 84, "missed_lines": 16, "matched_classes": 2},
-    )
-
-    summary = manager.build_task_summary(task_id, opencode_db_path=opencode_db, recalc_project_coverage=True)
-    assert summary["classes"]["generated"] == 2
-    assert summary["coverage"]["total"] == 84.0
-    assert summary["coverage"]["avg"] == 90.0
-    assert summary["coverage"]["max"] == 100.0
-    assert summary["coverage"]["min"] == 80.0
-    assert round(summary["mutation"]["total"], 4) == round((25 / 30) * 100.0, 4)
-    assert summary["mutation"]["avg"] == 80.0
-    assert summary["timing"]["elapsed_seconds"] == 1200.0
-    assert summary["tokens"]["task_db"]["total"] == 54
-    assert summary["tokens"]["verified"]["total"] == 93
-    assert summary["tokens"]["comparison"]["classes_from_sessions"] == 1
-    assert summary["tokens"]["comparison"]["classes_from_recovery"] == 1
-    assert summary["tokens"]["comparison"]["classes_mismatched"] == 1
-
-
 def test_tasks_cli_summary_outputs_tables_and_json(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -856,26 +732,27 @@ def test_tasks_cli_summary_outputs_tables_and_json(tmp_path, monkeypatch):
     finally:
         conn.close()
 
-    monkeypatch.setattr("uta.tasks.manager.run_tests_with_jacoco_batch", lambda *args, **kwargs: (True, "ok"))
-    monkeypatch.setattr("uta.tasks.manager.find_jacoco_report", lambda *args, **kwargs: str(opencode_db))
+    monkeypatch.setattr("uta.language.java.coverage_recompute.run_tests_with_jacoco_batch", lambda *args, **kwargs: (True, "ok"))
+    monkeypatch.setattr("uta.language.java.coverage_recompute.find_jacoco_report", lambda *args, **kwargs: str(opencode_db))
     monkeypatch.setattr(
-        "uta.tasks.manager.parse_jacoco_line_coverage_for_classes",
+        "uta.language.java.coverage_recompute.parse_jacoco_line_coverage_for_classes",
         lambda *args, **kwargs: {"line": 91.0, "covered_lines": 91, "missed_lines": 9, "matched_classes": 1},
     )
 
     runner = CliRunner()
-    result = runner.invoke(main, ["tasks", "summary", str(task_id), "--task-db", str(db_path), "--opencode-db", str(opencode_db)])
+    result = runner.invoke(main, ["tasks", "summary", str(task_id), "--task-db", str(db_path)])
     assert result.exit_code == 0, result.output
     assert "Task 1 Summary" in result.output
-    assert "Token And Cost Verification" in result.output
-    assert "Verification Health" in result.output
+    assert "Recorded Token And Cost Accounting" in result.output
+    assert "Accounting Coverage" in result.output
     assert "Project Coverage Recalculation" in result.output
 
-    json_result = runner.invoke(main, ["tasks", "summary", str(task_id), "--json", "--task-db", str(db_path), "--opencode-db", str(opencode_db)])
+    json_result = runner.invoke(main, ["tasks", "summary", str(task_id), "--json", "--task-db", str(db_path)])
     assert json_result.exit_code == 0, json_result.output
     payload = json.loads(json_result.output)
     assert payload["classes"]["generated"] == 1
-    assert payload["tokens"]["verified"]["total"] == 18
+    assert payload["tokens"]["recorded"]["total"] == 18
+    assert payload["tokens"]["recorded"]["cost_provenance"] == "unavailable"
     assert payload["coverage"]["total"] == 91.0
 
 
@@ -900,10 +777,10 @@ def test_tasks_cli_summary_marks_unmatched_project_coverage_recalc(tmp_path, mon
     )
     manager.db.update_repo_task(task_id, status="COMPLETED")
 
-    monkeypatch.setattr("uta.tasks.manager.run_tests_with_jacoco_batch", lambda *args, **kwargs: (True, "ok"))
-    monkeypatch.setattr("uta.tasks.manager.find_jacoco_report", lambda *args, **kwargs: "/tmp/jacoco.xml")
+    monkeypatch.setattr("uta.language.java.coverage_recompute.run_tests_with_jacoco_batch", lambda *args, **kwargs: (True, "ok"))
+    monkeypatch.setattr("uta.language.java.coverage_recompute.find_jacoco_report", lambda *args, **kwargs: "/tmp/jacoco.xml")
     monkeypatch.setattr(
-        "uta.tasks.manager.parse_jacoco_line_coverage_for_classes",
+        "uta.language.java.coverage_recompute.parse_jacoco_line_coverage_for_classes",
         lambda *args, **kwargs: {"line": 0.0, "covered_lines": 0, "missed_lines": 0, "matched_classes": 0},
     )
 
@@ -914,7 +791,7 @@ def test_tasks_cli_summary_marks_unmatched_project_coverage_recalc(tmp_path, mon
     assert "did not match any target classes" in result.output
 
 
-def test_schema_contains_plan_fields_and_fallback_estimates(tmp_path):
+def test_schema_contains_plan_fields_and_marks_unmeasured_estimates_unavailable(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     db_path = tmp_path / "tasks.db"
@@ -923,8 +800,8 @@ def test_schema_contains_plan_fields_and_fallback_estimates(tmp_path):
     task = manager.get_task(task_id)
 
     assert task["estimate_snapshot_json"]
-    assert task["estimated_total_tokens"] is not None
-    assert task["estimated_cost_usd"] is not None
+    assert task["estimated_total_tokens"] is None
+    assert task["estimated_cost_usd"] is None
     with manager.db.connect() as conn:
         repo_cols = {row["name"] for row in conn.execute("PRAGMA table_info(repo_tasks)")}
         class_cols = {row["name"] for row in conn.execute("PRAGMA table_info(class_tasks)")}
@@ -956,7 +833,7 @@ def test_stop_resume_and_class_priority(tmp_path):
     assert class_rows[0]["priority"] == 1
 
 
-def test_resume_acknowledges_unhandled_stop_control(tmp_path):
+def test_resume_refuses_pending_stop_until_runner_acknowledges(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     manager = TaskManager(tmp_path / "tasks.db")
@@ -964,6 +841,14 @@ def test_resume_acknowledges_unhandled_stop_control(tmp_path):
     manager.stop_task(task_id, reason="operator stop")
     assert manager.check_stop_requested(task_id) == "operator stop"
 
+    with pytest.raises(RuntimeError, match="stop is still pending"):
+        manager.resume_task(task_id)
+
+    task = manager.get_task(task_id)
+    assert task["status"] == "STOP_REQUESTED"
+    assert manager.check_stop_requested(task_id) == "operator stop"
+
+    manager.mark_stopped(task_id, reason="operator stop")
     manager.resume_task(task_id)
 
     assert manager.get_task(task_id)["status"] == "QUEUED"
@@ -1014,12 +899,12 @@ def test_poisoned_status_preserved_after_final_sync_with_queued_rows(tmp_path):
     task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A", "pkg.B"])
     manager.mark_poisoned(task_id, "Auto-quarantined after repeated push failures")
 
-    manager.sync_results(task_id, {}, final_error="CI repair auto-push found no test changes to commit")
+    manager.sync_results(task_id, {}, final_error="RDC repair auto-push found no test changes to commit")
 
     task = manager.get_task(task_id)
     assert task["status"] == "POISONED"
     assert task["current_stage"] == "finished"
-    assert task["error"] == "CI repair auto-push found no test changes to commit"
+    assert task["error"] == "RDC repair auto-push found no test changes to commit"
 
 
 def test_provider_error_status_is_terminal(tmp_path):
@@ -1071,6 +956,8 @@ def test_cancel_cancels_not_yet_started_work(tmp_path):
     repo.mkdir()
     manager = TaskManager(tmp_path / "tasks.db")
     task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A", "pkg.B"])
+    running = next(row for row in manager.list_class_tasks(task_id) if row["class_fqn"] == "pkg.A")
+    manager.db.update_class_task(running["id"], status="RUNNING", current_stage="python_verify")
 
     manager.cancel_task(task_id, reason="operator cancel")
 
@@ -1123,30 +1010,23 @@ def test_push_verified_preserves_terminal_success_status(tmp_path):
     assert task["remote_ref"] == "abc123"
 
 
-def test_kimi_cache_read_uses_quarter_input_rate():
-    kimi_cost = _estimate_cost_from_tokens(
-        model="kimi-k2.6",
-        input_tokens=0,
-        output_tokens=0,
-        cache_read_tokens=1_000_000,
-    )
-    default_cost = _estimate_cost_from_tokens(
-        model="gpt-5.4",
-        input_tokens=0,
-        output_tokens=0,
-        cache_read_tokens=1_000_000,
-    )
-    kimi_input_rate = 0.7448
-    assert abs(kimi_cost - kimi_input_rate * 0.25) < 0.001
-    assert kimi_cost != default_cost
+def test_push_verified_recovers_push_failed_task(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manager = TaskManager(tmp_path / "tasks.db")
+    task_id = manager.create_task(repo_path=str(repo), class_fqns=["pkg.A"])
+    manager.mark_running(task_id)
+    manager.record_push_failed(task_id, branch_name="uta/test", message="auth failed", class_fqns=["pkg.A"])
+    manager.db.update_repo_task(task_id, current_stage="finished", current_detail="auth failed")
 
+    manager.record_push_verified(task_id, branch_name="uta/test", local_head="abc123", remote_head="abc123")
 
-def test_cost_treats_input_as_non_cached_tokens():
-    cost = _estimate_cost_from_tokens(
-        model="gpt-5.4",
-        input_tokens=1_000_000,
-        output_tokens=0,
-        cache_read_tokens=1_000_000,
-    )
-
-    assert abs(cost - 2.75) < 0.001
+    task = manager.get_task(task_id)
+    class_task = manager.db.find_class_task(task_id, "pkg.A")
+    assert task["status"] == "COMPLETED"
+    assert task["current_stage"] == "finished"
+    assert task["error"] is None
+    assert task["last_error"] is None
+    assert class_task["status"] == "PASS"
+    assert class_task["commit_sha"] == "abc123"
+    assert class_task["pushed_at"]

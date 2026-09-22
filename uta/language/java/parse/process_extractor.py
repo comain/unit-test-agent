@@ -1,5 +1,5 @@
-from typing import List, Dict, Set, Optional
-from uta.language.java.parse.models import CodeGraph, ProcessFlow, FlowStep, ExternalCall
+from typing import List
+from uta.language.java.parse.models import CodeGraph, ProcessFlow, FlowStep
 
 class ProcessExtractor:
     def __init__(self, graph: CodeGraph):

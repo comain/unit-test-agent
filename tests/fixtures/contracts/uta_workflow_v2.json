@@ -1,0 +1,39 @@
+{
+  "contract_version": "uta-generation-workflow-v2",
+  "operation_artifact": {
+    "relative_path": "run-1/unit-1/6f87cedac71c839d7987f5783a94ba81e5a786a57aacc7286232d05e55184c99.json",
+    "sha256": "f167ce971e0863a1be2d165f44c61e3d05d77fa4f6741adebdb9deba32442120"
+  },
+  "checkpoint": {
+    "cycle": "test-generation-cycle",
+    "version": "v2",
+    "unit_id": "unit-0001-05bc76d82807",
+    "thread_id": "uta:test-generation-cycle:v2:1:unit-0001-05bc76d82807:run-one"
+  },
+  "reconciliation_outcomes": {
+    "fresh": "run",
+    "completed": "reuse_result",
+    "orphan": "adopt_result",
+    "allowed_edit": "verify_existing_edit",
+    "crash_no_effect": "retry_no_effect",
+    "unsafe_edit": "fail_unsafe",
+    "replay_exhausted": "fail_indeterminate"
+  },
+  "retention_order": [
+    "checkpoint",
+    "operation_artifacts",
+    "operation_rows",
+    "prompts"
+  ],
+  "prompt_sha256": {
+    "fix_compile": "622e6f5dca9264a55b796709ee5318d4916010ff8162e77823c6c4eff761d815",
+    "fix_coverage": "c147676bc2da064078c579cfb9c622b09bfa3e45ebb9d4b2c89c0eafca74b161",
+    "fix_mutations": "d990c4af23ee0da7eaeeeef0d29b0b66f4db1d73bdf6222b3c5ca026b7a2c8a1",
+    "generate_test": "5de8354e0be1aceee4c149366f7ab963b20de268035d6b1f59267469b8c84813",
+    "plan_tests": "db2111e94d324d4a1606382bdd84e19c119a8645333bfb4d6b082b2234d55063",
+    "python_fix_compile": "706bdca41f87de3730990dcf0ad3cdde1a260c0d4c18ed1849c93251b5bfa595",
+    "python_fix_coverage": "ebc8dbac8678d3a66009918f701cf552d7bfdb9ce5bf472900b9e0c4fdc48a41",
+    "python_fix_mutations": "da7ccc3fb52ea4122af1edb803f7b53b7ae35b1d107a796627a1e99b48b21497",
+    "python_generate_test": "458573cdcb35a5d4e401fb04e6ee36b133e546802dc46c35c6ba8b64acfde215"
+  }
+}

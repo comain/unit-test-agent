@@ -1,10 +1,9 @@
 """Tests for uta tasks report batch/repo CLI commands (Task 9)."""
 import json
-import tempfile
 from pathlib import Path
 from click.testing import CliRunner
 
-from uta.engine.languages import RawTargetSelection
+from uta.shared.languages import RawTargetSelection
 from uta.language.python.adapter import PythonLanguageAdapter
 
 
@@ -56,10 +55,10 @@ def _make_python_db_with_data(tmp_path):
 
 class TestReportBatch:
     def test_report_batch_json_output(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_db_with_data(tmp_path)
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         report_dir = tmp_path / "reports"
         report_dir.mkdir()
 
@@ -73,10 +72,10 @@ class TestReportBatch:
         assert "by_status" in data or "tasks" in data or "status_counts" in data or "repo_tasks" in data
 
     def test_report_batch_shows_completed(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_db_with_data(tmp_path)
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result = runner.invoke(
             cli,
@@ -90,11 +89,11 @@ class TestReportBatch:
 
 class TestReportRepo:
     def test_report_repo_json_output(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_db_with_data(tmp_path)
         slug = Path(repo).name
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result = runner.invoke(
             cli,
@@ -109,11 +108,11 @@ class TestReportRepo:
         assert data["classes"][0]["fqn"] == "com.A"
 
     def test_report_repo_json_output_is_target_first_for_python(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_python_db_with_data(tmp_path)
         slug = Path(repo).name
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result = runner.invoke(
             cli,
@@ -131,10 +130,10 @@ class TestReportRepo:
         assert data["classes"] == data["targets"]
 
     def test_report_repo_unknown_slug(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_db_with_data(tmp_path)
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result = runner.invoke(
             cli,
@@ -147,10 +146,10 @@ class TestReportRepo:
 
 class TestDashboard:
     def test_dashboard_once_exits_cleanly(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_db_with_data(tmp_path)
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result = runner.invoke(
             cli,
@@ -160,10 +159,10 @@ class TestDashboard:
         assert result.exit_code == 0, result.output
 
     def test_dashboard_shows_status_counts(self, tmp_path):
-        from uta.cli import main as cli
+        from uta.app.cli import main as cli
 
         db_path, repo, tid = _make_db_with_data(tmp_path)
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result = runner.invoke(
             cli,

@@ -5,13 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "unit-test-agent"
 version = "0.1.0"
-requires-python = ">=3.9"
+# 3.11 because agent-core requires it, and because this is what UTA already
+# deploys: the beta node runs 3.12.9 and scripts/deploy_single_host.sh pins
+# 3.11 for its uv fallback. The old ">=3.9" described no running deployment.
+requires-python = ">=3.11"
 description = "CLI tool to generate unit tests for Java and Python codebases"
-license = "Apache-2.0"
-license-files = ["LICENSE"]
 dependencies = [
     "click>=8.1",
-    "langgraph>=0.2",
+    "langgraph>=1.0,<2.0",
     "langchain-core>=0.3",
     "tree-sitter>=0.22",
     "tree-sitter-java>=0.23",
@@ -24,20 +25,41 @@ dependencies = [
     "rich>=13.0",
     "jinja2>=3.0",
     "pyjwt[crypto]>=2.8",
+    "mutmut==3.5.0",
+    # The shared agent harness, runtime and trigger protocols. Pinned to a tag,
+    # not `@main`, for the duration of the generation-cycle decomposition: that
+    # work is a large rewrite of this repo, and a moving agent-core underneath
+    # it would make every failure ambiguous between "the decomposition broke
+    # it" and "the dependency changed". Bump deliberately.
+    "agent-core[langgraph,yaml] @ git+https://github.com/comain/agent-core.git@v0.8.52",
+    # Runtime, not dev: the production runtime executes the tests it generates.
+    "pytest>=8.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22"]
+dev = [
+    "pytest-asyncio>=0.24",
+    "respx>=0.22",
+    "coverage>=7.0",
+    "mutmut==3.5.0",
+    "whatthepatch>=1.0",
+    "ruff>=0.16",
+]
 
 [project.scripts]
-uta = "uta.cli:main"
+uta = "uta.app.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["uta*"]
+where = [".", "tools/python-enforcement"]
+include = ["uta*", "uta_enforce_core*", "uta_py_enforce*"]
 
 [tool.setuptools.package-data]
-"uta.ci_plugin" = ["templates/*.html"]
-"uta.prompts" = ["*.txt"]
+# The workflow description. Without it a non-editable install has no flow
+# and every run fails at graph build.
+"uta.testgen.graph" = ["*.yaml"]
+"uta.app" = ["templates/*.html"]
+"uta.testgen.prompts" = ["*.txt"]
+"uta.language.java.maven_compat" = ["*.jar", "manifest.json", "pom.xml", "README.md", "src/main/java/uta/maven/*.java", "src/main/resources/META-INF/plexus/*.xml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -45,4 +67,37 @@ markers = [
     "integration: marks tests requiring OpenCode server or real repo (deselect with '-m \"not integration\"')",
     "e2e: end-to-end tests covering full phase acceptance criteria (deselect with '-m \"not e2e\"')",
     "e2e_git_home: full workflow against repos under $HOME (git + Maven; may skip on missing deps)",
+    "real_e2e: opt-in fresh-clone E2E lanes for real Java/Python repos (requires UTA_E2E_MODE=real or nightly)",
 ]
+
+
+[tool.ruff]
+# Match the interpreter the suite runs on.
+target-version = "py312"
+extend-exclude = [
+    # Deliberately Python 2. The enforcement client supports a py2 lane, and
+    # these fixtures exist to prove it; they are not meant to parse as py3.
+    "tests/fixtures/python_projects/py2_legacy_project",
+]
+
+[tool.ruff.lint]
+# Defects, not style. `E9` is syntax/runtime breakage and `F` is pyflakes --
+# undefined names, redefinitions, dead imports, unused bindings.
+#
+# The modernization families (UP006 `Dict` -> `dict` and friends) are
+# deliberately off. They account for ~3,200 findings, and applying them would
+# put a mechanical rewrite of most of the tree in the middle of a migration
+# whose whole discipline is that structural moves carry no behaviour change.
+# Turning them on is its own commit, after the package boundaries land.
+select = ["E9", "F"]
+
+# F401 is on. It was deferred while modules re-exported without declaring a
+# public surface: ruff would remove an import that is unused *in its own module*
+# but is the name other modules import from it, and clearing the 249 of them
+# mechanically broke five test modules that way.
+#
+# The wildcard bridges are gone and the facades now carry explicit `__all__`,
+# so ruff can finally tell a dead import from a re-export. Turning it back on
+# immediately found five private helpers imported into `uta/tasks/rdc_delivery`
+# and never used -- residue from the delivery extraction, invisible for as long
+# as this was off.

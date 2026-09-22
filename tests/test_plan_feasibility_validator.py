@@ -1,6 +1,6 @@
 from typing import Optional
 
-from uta.engine.validation import (
+from uta.testgen.validation import (
     FeasibilityVerdict,
     validate_plan_feasibility,
 )

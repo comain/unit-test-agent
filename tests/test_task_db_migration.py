@@ -50,7 +50,14 @@ def test_task_db_init_backfills_target_identity_columns_on_old_db(tmp_path):
     with db.connect() as conn:
         repo_cols = _columns(conn, "repo_tasks")
         class_cols = _columns(conn, "class_tasks")
-        assert {"language", "estimate_snapshot_json", "total_classes"}.issubset(repo_cols)
+        assert {
+            "language",
+            "estimate_snapshot_json",
+            "total_classes",
+            "progress_event_count",
+            "progress_event_bytes",
+            "progress_truncated",
+        }.issubset(repo_cols)
         assert {
             "language",
             "target_id",
@@ -65,6 +72,13 @@ def test_task_db_init_backfills_target_identity_columns_on_old_db(tmp_path):
         row = conn.execute("SELECT * FROM class_tasks WHERE id=1").fetchone()
         versions = [item["version"] for item in conn.execute("SELECT version FROM schema_version ORDER BY version")]
         indexes = {item["name"] for item in conn.execute("PRAGMA index_list(class_tasks)")}
+        event_indexes = {
+            item["name"] for item in conn.execute("PRAGMA index_list(task_events)")
+        }
+        legacy_prompt_indexes = {
+            item["name"]
+            for item in conn.execute("PRAGMA index_list(legacy_prompt_scopes)")
+        }
 
     assert repo["language"] == "java"
     assert py_repo["language"] == "python"
@@ -73,8 +87,10 @@ def test_task_db_init_backfills_target_identity_columns_on_old_db(tmp_path):
     assert row["symbol"] == "pkg.Foo"
     assert row["target_granularity"] == "class"
     assert row["display_name"] == "pkg.Foo"
-    assert versions == [1, 2]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
     assert "idx_class_tasks_language_target" in indexes
+    assert "task_events_cursor_idx" in event_indexes
+    assert "legacy_prompt_scopes_retention_idx" in legacy_prompt_indexes
 
 
 def test_task_db_init_clears_stale_python_file_symbol(tmp_path):

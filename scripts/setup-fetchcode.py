@@ -24,11 +24,15 @@ from typing import Dict, Iterable, Iterator, List, Optional, Sequence
 
 
 DEFAULT_SOURCE_ROOTS = [
-    "~/src",
-    "~/work",
+    "~/fd",
+    "~/wms",
+    "~/platform",
+    "~/tms",
+    "~/finance",
+    "~/md",
 ]
 
-DEFAULT_GROUP_IDS = ["com.example"]
+DEFAULT_GROUP_IDS = ["com.example", "com.example"]
 REPO_LIST_HEADER = "# group\trelative_path\tgit_url\tsource_path"
 
 
@@ -296,7 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-root",
         action="append",
         default=[],
-        help="Local source root to scan for git repos. Repeatable. Defaults to ~/src and ~/work.",
+        help="Local source root to scan for git repos. Repeatable. Defaults to ~/fd, ~/wms, ~/platform, ~/tms, ~/finance, ~/md.",
     )
     parser.add_argument("--project-dir", "--output-root", default="external-source", help="Target directory for fetched source repos.")
     parser.add_argument("--repo-list", default=None, help="TSV repo list path. Defaults to PROJECT_DIR/repo.txt.")
@@ -321,7 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-group-id",
         action="append",
         default=[],
-        help="Maven groupId to copy. Defaults to com.example.",
+        help="Internal Maven groupId to copy. Defaults to com.example and com.example.",
     )
     parser.add_argument("--manifest", default=None, help="Write JSON manifest. Defaults to PROJECT_DIR/setup-fetchcode-manifest.json.")
     parser.add_argument("--dry-run", action="store_true", help="Print actions without changing files.")

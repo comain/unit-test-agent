@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from uta.engine.project_summary import ProjectSummaryArtifacts
+from uta.testgen.project_summary import ProjectSummaryArtifacts
 from uta.language.java.parse.models import CodeGraph
+from uta.shared.backends import BackendConstructionRequest
 
 
 class JavaProjectSummaryProvider:
@@ -16,7 +17,7 @@ class JavaProjectSummaryProvider:
         self.module = module
 
     def sync(self) -> ProjectSummaryArtifacts:
-        from uta.engine import project_summary_artifacts as artifacts
+        from uta.testgen import project_summary_artifacts as artifacts
 
         repo = Path(self.repo_path)
         ctx_dir = repo / ".uta_cache" / "context"
@@ -53,4 +54,18 @@ class JavaProjectSummaryProvider:
             context_summary_abs=str(context_path.resolve()),
             test_guidance_abs=str(guidance_path.resolve()),
             compile_facts_abs=str((ctx_dir / artifacts.COMPILE_FACTS_FILENAME).resolve()),
+        )
+
+
+class JavaProjectSummaryProviderFactory:
+    """Construct Java summaries with the graph Java analysis requires."""
+
+    required_inputs = frozenset({"graph"})
+    input_descriptions = {"graph": "parsed CodeGraph"}
+
+    def create(self, request: BackendConstructionRequest) -> JavaProjectSummaryProvider:
+        return JavaProjectSummaryProvider(
+            str(request.repo_path),
+            request.require("graph"),
+            request.inputs.get("module"),
         )

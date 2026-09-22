@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from uta.engine.project_summary import ProjectSummaryArtifacts
+from uta.testgen.project_summary import ProjectSummaryArtifacts
 from uta.language.python.context_builder import PythonContextBuilder
+from uta.shared.backends import BackendConstructionRequest
 
 
 class PythonProjectSummaryProvider:
@@ -16,7 +17,7 @@ class PythonProjectSummaryProvider:
         self.max_files = max_files
 
     def sync(self) -> ProjectSummaryArtifacts:
-        from uta.engine import project_summary_artifacts as artifacts
+        from uta.testgen import project_summary_artifacts as artifacts
 
         repo = self.repo_path
         ctx_dir = repo / ".uta_cache" / "context"
@@ -46,6 +47,18 @@ class PythonProjectSummaryProvider:
             context_summary_abs=str(context_path.resolve()),
             test_guidance_abs=str(guidance_path.resolve()),
             compile_facts_abs=str((ctx_dir / artifacts.COMPILE_FACTS_FILENAME).resolve()),
+        )
+
+
+class PythonProjectSummaryProviderFactory:
+    """Construct Python summaries from source with no graph prerequisite."""
+
+    required_inputs = frozenset()
+
+    def create(self, request: BackendConstructionRequest) -> PythonProjectSummaryProvider:
+        return PythonProjectSummaryProvider(
+            request.repo_path,
+            max_files=int(request.inputs.get("max_files") or 500),
         )
 
 
@@ -161,7 +174,7 @@ def _build_python_test_guidance(repo: Path, index: Dict[str, Any]) -> str:
 
 
 def _build_python_repo_summary(repo: Path, index: Dict[str, Any]) -> str:
-    from uta.engine import project_summary_artifacts as artifacts
+    from uta.testgen import project_summary_artifacts as artifacts
 
     return "\n".join(
         [

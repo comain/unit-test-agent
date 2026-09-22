@@ -1,13 +1,13 @@
 import httpx
 from pathlib import Path
 
-from uta.opencode.server import OpenCodeServer
+from agent_core.harness.server import OpenCodeServer
 
 
 def test_server_strips_openai_api_key_for_openai_models(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_small_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openai")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_model", "openai/gpt-5.4")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_small_model", "openai/gpt-5.4")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "stale-key")
 
     popen_calls = {}
@@ -34,7 +34,7 @@ def test_server_strips_openai_api_key_for_openai_models(monkeypatch, tmp_path):
 
 def test_server_uses_custom_serve_cmd_when_configured(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "uta.config.settings.opencode_serve_cmd",
+        "uta.shared.config.settings.opencode_serve_cmd",
         '["bun", "run", "--cwd", "/tmp/opencode", "./src/index.ts", "serve"]',
     )
 
@@ -62,7 +62,7 @@ def test_server_uses_custom_serve_cmd_when_configured(monkeypatch, tmp_path):
 
 
 def test_server_uses_ipv6_host_for_probe_and_cmd(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_host", "::1")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_host", "::1")
 
     observed = {}
 
@@ -77,8 +77,9 @@ def test_server_uses_ipv6_host_for_probe_and_cmd(monkeypatch, tmp_path):
         observed["cmd"] = cmd
         return DummyProcess()
 
-    def fake_get(url, timeout):
+    def fake_get(url, timeout, headers=None):
         observed["url"] = url
+        observed["headers"] = headers
         return httpx.Response(200)
 
     monkeypatch.setattr("subprocess.Popen", fake_popen)
@@ -92,9 +93,9 @@ def test_server_uses_ipv6_host_for_probe_and_cmd(monkeypatch, tmp_path):
 
 
 def test_server_keeps_openai_api_key_for_non_openai_models(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "openrouter/z-ai/glm-5.1")
-    monkeypatch.setattr("uta.config.settings.opencode_small_model", "openrouter/z-ai/glm-5.1")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "openrouter")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_model", "openrouter/z-ai/glm-5.1")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_small_model", "openrouter/z-ai/glm-5.1")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "openrouter")
     monkeypatch.setenv("OPENAI_API_KEY", "host-key")
 
     popen_calls = {}
@@ -120,8 +121,8 @@ def test_server_keeps_openai_api_key_for_non_openai_models(monkeypatch, tmp_path
 
 
 def test_server_persists_debug_log_when_print_logs_enabled(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_server_print_logs", True)
-    monkeypatch.setattr("uta.config.settings.opencode_server_log_to_file", True)
+    monkeypatch.setattr("uta.shared.config.settings.opencode_server_print_logs", True)
+    monkeypatch.setattr("uta.shared.config.settings.opencode_server_log_to_file", True)
 
     popen_calls = {}
 
@@ -152,10 +153,10 @@ def test_server_persists_debug_log_when_print_logs_enabled(monkeypatch, tmp_path
 
 
 def test_server_passes_ollama_host_when_configured(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "ollama/qwen3.5:35b-a3b-coding-nvfp4")
-    monkeypatch.setattr("uta.config.settings.opencode_small_model", "ollama/qwen3.5:35b-a3b-coding-nvfp4")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "ollama")
-    monkeypatch.setattr("uta.config.settings.ollama_host", "http://127.0.0.1:11434")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_model", "ollama/qwen3.5:35b-a3b-coding-nvfp4")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_small_model", "ollama/qwen3.5:35b-a3b-coding-nvfp4")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "ollama")
+    monkeypatch.setattr("uta.shared.config.settings.ollama_host", "http://127.0.0.1:11434")
 
     popen_calls = {}
 
@@ -180,11 +181,11 @@ def test_server_passes_ollama_host_when_configured(monkeypatch, tmp_path):
 
 
 def test_server_passes_tencent_credentials_when_configured(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "tencent/glm-5")
-    monkeypatch.setattr("uta.config.settings.opencode_small_model", "tencent/glm-5")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "tencent")
-    monkeypatch.setattr("uta.config.settings.tencent_api_key", "tencent-secret")
-    monkeypatch.setattr("uta.config.settings.tencent_base_url", "https://tokenhub.tencentmaas.com/v1")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_model", "tencent/glm-5")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_small_model", "tencent/glm-5")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "tencent")
+    monkeypatch.setattr("uta.shared.config.settings.tencent_api_key", "tencent-secret")
+    monkeypatch.setattr("uta.shared.config.settings.tencent_base_url", "https://tokenhub.tencentmaas.com/v1")
 
     popen_calls = {}
 
@@ -210,10 +211,10 @@ def test_server_passes_tencent_credentials_when_configured(monkeypatch, tmp_path
 
 
 def test_server_passes_deepseek_credentials_when_configured(monkeypatch, tmp_path):
-    monkeypatch.setattr("uta.config.settings.opencode_model", "deepseek/deepseek-v4-pro")
-    monkeypatch.setattr("uta.config.settings.opencode_small_model", "deepseek/deepseek-v4-pro")
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "deepseek")
-    monkeypatch.setattr("uta.config.settings.deepseek_api_key", "deepseek-secret")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_model", "deepseek/deepseek-v4-pro")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_small_model", "deepseek/deepseek-v4-pro")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "deepseek")
+    monkeypatch.setattr("uta.shared.config.settings.deepseek_api_key", "deepseek-secret")
 
     popen_calls = {}
 

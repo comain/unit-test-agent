@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-import hashlib
-import json
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from uta.ci_plugin.enforcement import EnforcementResultStatus, MavenEnforcementRunner, RunCommand
-from uta.engine.enforcement import ValidationVerdict
+from uta.enforcement.enforcement import QualityGateStatus, RunCommand
+from uta.language.java.enforcement_runner import MavenEnforcementRunner
+from uta.enforcement.enforcement import (
+    ValidationVerdict,
+    evidence_marker_header,
+    evidence_marker_payload,
+    finalize_evidence,
+    git_output,
+    validate_evidence_envelope,
+)
 
 
 JAVA_ENFORCEMENT_SCHEMA_VERSION = 1
@@ -33,6 +39,8 @@ def run_java_enforcement(
     base_ref: str = "origin/master",
     timeout_seconds: int = 1800,
     run_command: Optional[RunCommand] = None,
+    maven_central_mirror_url: str = "",
+    preserve_explicit_target_scope: bool = False,
 ) -> Dict[str, Any]:
     repo = Path(repo_path).expanduser().resolve()
     runner = MavenEnforcementRunner(
@@ -40,6 +48,8 @@ def run_java_enforcement(
         timeout_seconds=timeout_seconds,
         run_command=run_command,
         base_ref=base_ref,
+        maven_central_mirror_url=maven_central_mirror_url,
+        preserve_explicit_target_scope=preserve_explicit_target_scope,
     )
     result = runner.run(repo)
     evidence = {
@@ -50,7 +60,7 @@ def run_java_enforcement(
         "repo": str(repo),
         "baseRef": base_ref,
         "headRef": "HEAD",
-        "headCommit": _git_output(repo, "rev-parse", "HEAD"),
+        "headCommit": git_output(repo, "rev-parse", "HEAD"),
         "status": _status_value(result.status),
         "passed": bool(result.passed),
         "reasonCode": _reason_code(result.status, result.summary),
@@ -64,7 +74,7 @@ def run_java_enforcement(
         "utaVersion": UTA_VERSION,
         "enforcementCoreVersion": JAVA_ENFORCEMENT_CORE_VERSION,
     }
-    return _finalize(evidence)
+    return finalize_evidence(evidence, evidence_id_prefix="uta-java-enforcement")
 
 
 def validate_java_enforcement_evidence(
@@ -72,76 +82,52 @@ def validate_java_enforcement_evidence(
     *,
     expected_head: Optional[str] = None,
 ) -> ValidationVerdict:
-    if int(evidence.get("schemaVersion") or 0) != JAVA_ENFORCEMENT_SCHEMA_VERSION:
-        return ValidationVerdict(False, "unknown_schema_version", "Unsupported Java enforcement evidence schema version")
-    if evidence.get("language") != "java" or evidence.get("backend") != JAVA_ENFORCEMENT_BACKEND:
-        return ValidationVerdict(False, "wrong_backend", "Evidence is not Java Maven enforcement evidence")
-    if expected_head and evidence.get("headCommit") != expected_head:
-        return ValidationVerdict(False, "stale_head", "Evidence head commit does not match the expected branch head")
-    if evidence.get("status") != JavaEnforcementStatus.passed.value or evidence.get("passed") is not True:
-        return ValidationVerdict(
-            False,
-            str(evidence.get("reasonCode") or "failed"),
-            str(evidence.get("summary") or "Java enforcement did not pass"),
-        )
+    verdict = validate_evidence_envelope(
+        evidence,
+        language="java",
+        backend=JAVA_ENFORCEMENT_BACKEND,
+        schema_version=JAVA_ENFORCEMENT_SCHEMA_VERSION,
+        expected_head=expected_head,
+    )
+    if verdict is not None:
+        return verdict
     return ValidationVerdict(True, "passed", str(evidence.get("summary") or "Java enforcement passed"))
 
 
 def format_evidence_markers(evidence: Mapping[str, Any]) -> str:
     lines = [
-        f"[test-enforcer] java enforcement {evidence.get('status')} reason={evidence.get('reasonCode')} schema={evidence.get('schemaVersion')}",
-        f"UTA_JAVA_ENFORCEMENT_EVIDENCE={json.dumps(dict(evidence), ensure_ascii=False, sort_keys=True)}",
+        evidence_marker_header("java", evidence),
+        evidence_marker_payload("java", evidence),
     ]
     return "\n".join(lines) + "\n"
 
 
-def _status_value(status: EnforcementResultStatus) -> str:
-    if status == EnforcementResultStatus.passed:
+def _status_value(status: QualityGateStatus) -> str:
+    if status == QualityGateStatus.passed:
         return JavaEnforcementStatus.passed.value
-    if status == EnforcementResultStatus.missing_evidence:
+    if status == QualityGateStatus.missing_evidence:
         return JavaEnforcementStatus.missing_evidence.value
-    if status == EnforcementResultStatus.timeout:
+    if status == QualityGateStatus.timeout:
         return JavaEnforcementStatus.timeout.value
-    if status == EnforcementResultStatus.command_error:
+    if status == QualityGateStatus.command_error:
         return JavaEnforcementStatus.command_error.value
-    if status == EnforcementResultStatus.skipped:
+    if status == QualityGateStatus.skipped:
         return JavaEnforcementStatus.skipped.value
     return JavaEnforcementStatus.failed.value
 
 
-def _reason_code(status: EnforcementResultStatus, summary: str) -> str:
-    if status == EnforcementResultStatus.passed:
+def _reason_code(status: QualityGateStatus, summary: str) -> str:
+    if status == QualityGateStatus.passed:
         if "no changed production Java" in summary:
             return "no_changed_java_targets"
         return "passed"
-    if status == EnforcementResultStatus.missing_evidence:
+    if status == QualityGateStatus.missing_evidence:
         return "missing_evidence"
-    if status == EnforcementResultStatus.timeout:
+    if status == QualityGateStatus.timeout:
         return "timeout"
-    if status == EnforcementResultStatus.command_error:
+    if status == QualityGateStatus.command_error:
         return "command_error"
-    if status == EnforcementResultStatus.skipped:
+    if status == QualityGateStatus.skipped:
         return "skipped"
     return "failed"
 
-
-def _finalize(payload: Dict[str, Any]) -> Dict[str, Any]:
-    canonical = json.dumps({k: v for k, v in payload.items() if k != "evidenceId"}, sort_keys=True, ensure_ascii=False)
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    payload["evidenceId"] = f"uta-java-enforcement:{digest[:16]}"
-    return payload
-
-
-def _git_output(repo: Path, *args: str) -> str:
-    import subprocess
-
-    completed = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-        timeout=30,
-    )
-    return completed.stdout.strip() if completed.returncode == 0 else ""

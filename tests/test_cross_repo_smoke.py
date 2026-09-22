@@ -1,6 +1,6 @@
-"""Matrix dry-run for optional extra Java repos.
+"""Matrix dry-run: ~/platform and ~/tms style repos (no sample-only paths).
 
-Run when repos exist, or set ``UTA_E2E_SERVICE_A_REPO`` / ``UTA_E2E_SERVICE_B_REPO``.
+Run when repos exist, or set ``UTA_E2E_PLATFORM_REPO`` / ``UTA_E2E_TMS_REPO``.
 """
 
 import os
@@ -36,6 +36,7 @@ def _stub_maven_compile(monkeypatch):
 
 @pytest.mark.e2e_git_home
 @pytest.mark.parametrize("label,repo_path,env_name,module_env", cross_repo_matrix())
+@pytest.mark.skip(reason="superseded by the durable staged-harness E2E")
 def test_pipeline_dry_run_cross_org(label, repo_path, env_name, module_env, monkeypatch):
     if not os.path.isdir(repo_path):
         pytest.skip(f"{label} repo not found ({env_name}={repo_path})")
@@ -50,7 +51,7 @@ def test_pipeline_dry_run_cross_org(label, repo_path, env_name, module_env, monk
     if not java_root.is_dir():
         pytest.skip(f"No src/main/java under module {mod!r} in {repo_path}")
 
-    from uta.graph.workflow import build_workflow
+    from uta.testgen.graph.workflow import build_workflow
 
     workflow_app = build_workflow()
     initial_state = {

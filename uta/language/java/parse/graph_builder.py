@@ -1,7 +1,6 @@
-from typing import List, Dict, Optional, Set
+from typing import List, Dict
 from uta.language.java.parse.models import (
-    ParseResult, CodeGraph, GraphNode, GraphEdge, 
-    ParsedSymbol, ExtractedCall, ExtractedHeritage
+    ParseResult, CodeGraph, GraphNode, GraphEdge
 )
 
 class GraphBuilder:

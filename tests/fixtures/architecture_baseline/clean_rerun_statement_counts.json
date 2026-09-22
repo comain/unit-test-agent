@@ -1,0 +1,37 @@
+{
+  "clean_rerun_generation": {
+    "commit_total": 1,
+    "counts": {
+      "BEGIN": 1,
+      "COMMIT": 1,
+      "INSERT task_events": 1,
+      "INSERT workflow_run_supersessions": 1,
+      "SELECT class_tasks": 1,
+      "SELECT legacy_prompt_scopes": 1,
+      "SELECT repo_tasks": 2,
+      "SELECT runner_heartbeats": 1,
+      "UPDATE class_tasks": 2,
+      "UPDATE legacy_prompt_scopes": 1,
+      "UPDATE repo_tasks": 1,
+      "UPDATE task_control": 1
+    },
+    "statements": [
+      "SELECT repo_tasks",
+      "BEGIN",
+      "SELECT repo_tasks",
+      "SELECT runner_heartbeats",
+      "SELECT class_tasks",
+      "SELECT legacy_prompt_scopes",
+      "UPDATE class_tasks",
+      "UPDATE class_tasks",
+      "INSERT workflow_run_supersessions",
+      "UPDATE legacy_prompt_scopes",
+      "UPDATE repo_tasks",
+      "UPDATE task_control",
+      "INSERT task_events",
+      "COMMIT"
+    ],
+    "total": 14,
+    "write_total": 7
+  }
+}

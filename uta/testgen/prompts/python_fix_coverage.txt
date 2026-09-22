@@ -1,0 +1,49 @@
+A generated Python test file runs but does not meet the coverage gate.
+Add focused pytest assertions for uncovered behavior without changing production code.
+
+Stable rules:
+- Edit only the active verification test file: `{{ generated_test_path or test_file_path }}`.
+- Do not create a new `tests/uta_generated/` file unless that is the active verification test file.
+- Do not edit production Python files.
+- Do not write or modify verifier configuration or mutation runtime artifacts such as `pyproject.toml`, `setup.cfg`, `tox.ini`, `pytest.ini`, `mutants/`, `.mutmut-cache/`, or `.uta_cache/`; UTA owns verifier setup.
+- Preserve deterministic execution. If the file has UTA ownership metadata, keep it.
+- Mock network, database, scheduler, filesystem, Spark/Hive, and environment side effects.
+- Do not inspect Python implementation internals such as `__code__`, `co_consts`, bytecode, source text, or mutmut trampoline/wrapper constants; mutmut may replace functions during stats collection, so these assertions are not stable tests.
+- Import the target through the provided canonical module exactly. Do not invent alternate aliases or create a synthetic alias package such as `_uta_*`; mutmut must see tests execute the real mutated module.
+- If imports are stubbed through `sys.modules`, use dependency module names under the same package prefix as the canonical module. Example: for `src.app_shidiao`, stub `src.web_common`, not `web_common`.
+- Avoid brittle assertions on exact import-time logger names or module `__name__` values. During mutmut, wrappers may preserve behavior while changing import metadata; assert behavior and side effects instead.
+- Prefer small behavior assertions over broad smoke tests.
+- When choosing expected values, prefer documented behavior (spec context, docstrings/javadoc, existing tests, caller contracts) over re-deriving them from the implementation.
+- Assert observable behavior, not just execution. Avoid non-null/truthiness/length-only assertions unless they are paired with specific expected values, state changes, exceptions, or collaborator payload checks.
+- Do not mirror production implementation logic when computing expected values; use explicit examples, boundary values, and failure-mode expectations.
+
+{# CACHE_BOUNDARY #}
+{%- if spec_context %}
+
+### SUPPLIED BEHAVIOR CONTEXT
+The following externally supplied behavior rules are authoritative:
+
+{{ spec_context }}
+{%- endif %}
+### TARGET
+- Target: `{{ display_name }}`
+- Target ID: `{{ target_id }}`
+- Source: `{{ source_path }}`
+- Canonical module: `{{ canonical_module }}`
+{% if symbol %}- Symbol: `{{ symbol }}`
+{% endif %}
+- Active test path: `{{ generated_test_path or test_file_path }}`
+- Coverage gate: `{{ coverage_gate or ci_diff_coverage_gate }}`
+
+### CONTEXT
+- Target context: `{{ context_abs or target_context_abs }}`
+- Context JSON: `{{ context_json_abs }}`
+- Structured query: `{{ index_query_command }}`
+
+### COVERAGE DIAGNOSTICS
+```
+{{ coverage_diagnostics or coverage_report }}
+```
+
+### REPAIR TASK
+Add or refine tests in the same active verification test file so the target reaches the coverage gate.

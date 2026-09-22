@@ -1,8 +1,19 @@
 """Tests for daemon retry logic wired to classify_run_error (Task fix)."""
 import time
 import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
+
+from uta.app.cli import _task_ids_from_process_listing
+
+
+def test_process_listing_detects_live_task_runners():
+    listing = """
+/opt/app/unit_test_agent/.venv/bin/python -m uta.app.cli run --production --task-id 8 --task-db /tmp/tasks.db
+/opt/app/unit_test_agent/.venv/bin/python uta/app/cli.py run --task-id=12 --production
+/opt/app/unit_test_agent/.venv/bin/python uta/app/cli.py tasks daemon --task-db /tmp/tasks.db
+"""
+
+    assert _task_ids_from_process_listing(listing) == {8, 12}
 
 
 def _make_manager(tmp_path):
@@ -32,14 +43,12 @@ def _make_dead_proc(rc: int) -> MagicMock:
 
 def _build_daemon_closures(tmp_path, max_slots=2):
     """Extract the daemon's internal closures for unit testing without starting subprocesses."""
-    import sys
     from uta.tasks.scheduler import TaskScheduler
     from uta.tasks.manager import TaskManager
-    from uta.config import settings
     from uta.tasks.run_error_classifier import classify_run_error
 
     db_path = str(tmp_path / "tasks.db")
-    scheduler = TaskScheduler(db_path)
+    TaskScheduler(db_path)
     manager = TaskManager(db_path)
 
     pool: dict = {}

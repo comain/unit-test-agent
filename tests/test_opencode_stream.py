@@ -1,7 +1,7 @@
 """Phase 2 gate tests for OpenCodeStreamParser."""
 
 import pytest
-from uta.opencode.stream import OpenCodeStreamParser
+from agent_core.harness.stream import OpenCodeStreamParser
 
 
 @pytest.fixture

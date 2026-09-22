@@ -1,13 +1,11 @@
 """Phase 3 gate tests for the stream-based OpenCodeClient."""
 
-import io
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from uta.opencode.client import OpenCodeClient
-from uta.opencode.process import TurnResult
+from agent_core.harness.client import OpenCodeClient
+from agent_core.harness.process import TurnResult
 
 
 def _make_turn_result(
@@ -19,6 +17,7 @@ def _make_turn_result(
     patch_count=0,
     fallback_eligible=False,
     fallback_reason=None,
+    raw_log_path=None,
 ):
     return TurnResult(
         type=type_,
@@ -30,6 +29,7 @@ def _make_turn_result(
         patch_count=patch_count,
         fallback_eligible=fallback_eligible,
         fallback_reason=fallback_reason,
+        raw_log_path=raw_log_path,
     )
 
 
@@ -81,7 +81,7 @@ def test_session_id_persisted_across_turns(client):
 
     captured_args = {}
 
-    def fake_run_turn(message, *, session_id, model_id, repo_path, timeout, on_update):
+    def fake_run_turn(message, *, session_id, model_id, repo_path, timeout, on_update, env):
         captured_args["first_session_id"] = session_id
         return _make_turn_result(session_id="ses_opencode_001")
 
@@ -94,7 +94,7 @@ def test_session_id_persisted_across_turns(client):
     # Second turn: should use the opencode session_id from first turn
     client.send_message(sid, "Second message")
 
-    def fake_run_turn2(message, *, session_id, model_id, repo_path, timeout, on_update):
+    def fake_run_turn2(message, *, session_id, model_id, repo_path, timeout, on_update, env):
         captured_args["second_session_id"] = session_id
         return _make_turn_result(session_id="ses_opencode_001")
 
@@ -183,6 +183,60 @@ def test_timeout_result_propagated(client):
     assert event["type"] == "timeout"
 
 
+def test_no_output_timeout_requests_provider_fallback(client):
+    sid = client.create_session(model_id="token-pool/gpt-5.5")
+    client.send_message(sid, "Generate")
+    with patch.object(
+        client._process,
+        "run_turn",
+        return_value=_make_turn_result(
+            type_="timeout",
+            session_id="ses_x",
+            tokens={},
+            fallback_eligible=True,
+            fallback_reason="no_output",
+            error={
+                "name": "OpenCodeNoOutputTimeout",
+                "data": {"message": "OpenCode produced no JSONL output before timeout"},
+            },
+            raw_log_path="/tmp/turn.jsonl",
+        ),
+    ):
+        event = client.poll_completion(sid)
+
+    assert event["type"] == "error"
+    assert event["fallback_eligible"] is True
+    assert event["fallback_reason"] == "no_output"
+    assert event["provider_id"] == "token-pool"
+    assert event["model_id"] == "token-pool/gpt-5.5"
+    assert event["raw_log_path"] == "/tmp/turn.jsonl"
+
+
+def test_no_output_stall_requests_provider_fallback(client):
+    sid = client.create_session(model_id="token-pool/gpt-5.5")
+    client.send_message(sid, "Generate")
+    with patch.object(
+        client._process,
+        "run_turn",
+        return_value=_make_turn_result(
+            type_="stalled",
+            session_id="ses_x",
+            tokens={},
+            fallback_eligible=True,
+            fallback_reason="no_output",
+            error={
+                "name": "OpenCodeNoOutputStall",
+                "data": {"message": "OpenCode stream ended without assistant output"},
+            },
+        ),
+    ):
+        event = client.poll_completion(sid)
+
+    assert event["type"] == "error"
+    assert event["fallback_eligible"] is True
+    assert event["fallback_reason"] == "no_output"
+
+
 def test_send_message_split_concatenates(client):
     sid = client.create_session()
     client.send_message_split(sid, "stable-prefix\n", "volatile-tail")
@@ -197,7 +251,7 @@ def test_model_id_from_create_session_used_in_run_turn(client):
 
     captured = {}
 
-    def fake_run_turn(message, *, session_id, model_id, repo_path, timeout, on_update):
+    def fake_run_turn(message, *, session_id, model_id, repo_path, timeout, on_update, env):
         captured["model_id"] = model_id
         return _make_turn_result(session_id="ses_x")
 
@@ -208,7 +262,7 @@ def test_model_id_from_create_session_used_in_run_turn(client):
 
 
 def test_configured_variant_forwarded_to_run_turn(monkeypatch, client):
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_variant", "none")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_variant", "none")
     sid = client.create_session(model_id="openai/gpt-5.5")
     client.send_message(sid, "hello")
 
@@ -229,7 +283,7 @@ def test_on_update_forwarded_to_run_turn(client):
     client.send_message(sid, "hi")
     updates = []
 
-    def fake_run_turn(message, *, session_id, model_id, repo_path, timeout, on_update):
+    def fake_run_turn(message, *, session_id, model_id, repo_path, timeout, on_update, env):
         if on_update:
             on_update("text: hello from stream")
         return _make_turn_result(session_id="ses_x")

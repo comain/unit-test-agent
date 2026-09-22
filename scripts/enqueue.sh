@@ -7,15 +7,15 @@
 #
 # Environment:
 #   UTA_TASK_DB   path to the SQLite task DB (default: uta_tasks.db)
-#   UTA_CLONE_ROOT clone destination root (default: ~/.local/share/uta/code)
+#   UTA_CLONE_ROOT clone destination root (default: /data/w/code)
 #   UTA_VENV_DIR  UTA virtualenv used to run the CLI (default: .venv when present)
 #   UTA_CLI_PYTHON_BIN explicit Python used to run the UTA CLI
 #
 # Examples:
-#   ./scripts/enqueue.sh git@git.example.com:team/myrepo.git
+#   ./scripts/enqueue.sh git@git.corp.example.com:team/myrepo.git
 #   ./scripts/enqueue.sh https://github.com/org/repo.git --module biz --hard-cap-usd 5.00
-#   ./scripts/enqueue.sh git@git.example.com:team/python-job.git --language python --target jobs/forecast.py
-#   ./scripts/enqueue.sh git@git.example.com:team/python-job.git --language python --all
+#   ./scripts/enqueue.sh git@git.corp.example.com:team/python-job.git --language python --target jobs/forecast.py
+#   ./scripts/enqueue.sh git@git.corp.example.com:team/python-job.git --language python --all
 
 set -euo pipefail
 
@@ -34,4 +34,4 @@ fi
 
 cd "$REPO_ROOT"
 
-exec "$PYTHON_BIN" -m uta.cli tasks enqueue "$@" --task-db "$TASK_DB"
+exec "$PYTHON_BIN" -m uta.app.cli tasks enqueue "$@" --task-db "$TASK_DB"

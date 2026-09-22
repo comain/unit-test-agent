@@ -5,9 +5,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from uta.engine.parse import ParsedCallable, ParsedImport, ParseDiagnostic, ParseProjectRequest
-from uta.engine.targets import TargetRef
-from uta.engine.languages import RawTargetSelection
+from uta.shared.parse import ParsedCallable, ParsedImport, ParseDiagnostic, ParseProjectRequest
+from uta.shared.languages import RawTargetSelection
 from uta.language.python.adapter import PythonLanguageAdapter
 from uta.language.python.parse.models import PythonParseResult
 from uta.language.python.parse.parser import PythonParser

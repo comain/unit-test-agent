@@ -4,8 +4,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from uta.engine.batch import BatchGenerationRequest, BatchGenerationResult
-from uta.engine.targets import TargetRef, coerce_targets
+from uta.testgen.batch import (
+    BatchGenerationRequest,
+    BatchGenerationResult,
+    batch_agent_turn_state,
+)
+from uta.shared.targets import coerce_targets
+from uta.language.java.test_quality import attach_java_test_quality
 
 
 @dataclass(frozen=True)
@@ -24,10 +29,9 @@ class JavaBatchGenerationRequest(BatchGenerationRequest):
     stop_after_stage: Optional[str] = None
     resume: bool = False
     preserve_branch: bool = False
-    quality_mode: str = "class_batch"
     quality_gate_backend: str = "builtin"
     quality_gate_command: str = ""
-    ci_context: Dict[str, Any] = field(default_factory=dict)
+    rdc_context: Dict[str, Any] = field(default_factory=dict)
     session_id: Optional[str] = None
     session_ids: List[str] = field(default_factory=list)
     run_log_path: Optional[str] = None
@@ -68,18 +72,28 @@ class JavaBatchGenerationResult(BatchGenerationResult):
 class JavaBatchGenerator:
     language = "java"
 
-    def __init__(self, workflow_app: Optional[Any] = None):
+    def __init__(
+        self,
+        workflow_app: Optional[Any] = None,
+        harness_factory: Optional[Any] = None,
+    ):
         self.workflow_app = workflow_app
+        self.harness_factory = harness_factory
 
     def run(self, request: BatchGenerationRequest) -> JavaBatchGenerationResult:
         if not isinstance(request, JavaBatchGenerationRequest):
             raise TypeError("JavaBatchGenerator requires JavaBatchGenerationRequest")
-        return run_java_batch_generation(request, workflow_app=self.workflow_app)
+        return run_java_batch_generation(
+            request,
+            workflow_app=self.workflow_app,
+            harness_factory=self.harness_factory,
+        )
 
 
 def build_java_initial_state(request: JavaBatchGenerationRequest) -> Dict[str, Any]:
     class_fqns = list(request.class_fqns or [target.target_id for target in request.targets])
     return {
+        **batch_agent_turn_state(request),
         "repo_path": str(Path(request.repo_path)),
         "module": request.module,
         "module_filter": request.module_filter if request.module_filter is not None else request.module,
@@ -97,7 +111,8 @@ def build_java_initial_state(request: JavaBatchGenerationRequest) -> Dict[str, A
         "quality_mode": request.quality_mode,
         "quality_gate_backend": request.quality_gate_backend,
         "quality_gate_command": request.quality_gate_command,
-        "ci_context": dict(request.ci_context or {}),
+        "rdc_context": dict(request.rdc_context or {}),
+        "spec_context": str(request.spec_context or (request.rdc_context or {}).get("specContext") or ""),
         "classes_per_agent_run": request.classes_per_run,
         "branch_name": request.branch_name,
         "started_at": request.started_at,
@@ -111,6 +126,7 @@ def build_java_initial_state(request: JavaBatchGenerationRequest) -> Dict[str, A
         "flows": [],
         "session_id": request.session_id,
         "session_ids": list(request.session_ids or ([request.session_id] if request.session_id else [])),
+        "session_refs": [],
         "results": {},
         "phase_timings": dict(request.phase_timings or {}),
         "phase_token_usage": {},
@@ -131,13 +147,54 @@ def run_java_batch_generation(
     request: JavaBatchGenerationRequest,
     *,
     workflow_app: Optional[Any] = None,
+    harness_factory: Optional[Any] = None,
 ) -> JavaBatchGenerationResult:
+    from uta.testgen.standalone_execution import open_standalone_generation_execution
+
     if workflow_app is None:
-        from uta.graph.workflow import build_workflow
+        from uta.testgen.graph.workflow import build_workflow
 
         workflow_app = build_workflow()
-    final_state = workflow_app.invoke(build_java_initial_state(request))
+    if request.task_id is None and request.task_db_path is None:
+        with open_standalone_generation_execution(request) as execution:
+            final_state = _invoke_java_workflow(
+                execution.request,
+                workflow_app=workflow_app,
+                prompt_artifact_scope=execution.prompt_artifact_scope,
+                harness_factory=harness_factory,
+            )
+            projected = execution.project(final_state)
+        return _java_batch_result(request, projected)
+    final_state = _invoke_java_workflow(
+        request,
+        workflow_app=workflow_app,
+        prompt_artifact_scope=None,
+        harness_factory=harness_factory,
+    )
+    return _java_batch_result(request, final_state)
+
+
+def _invoke_java_workflow(
+    request: JavaBatchGenerationRequest,
+    *,
+    workflow_app: Any,
+    prompt_artifact_scope: Any,
+    harness_factory: Optional[Any],
+) -> Dict[str, Any]:
+    initial_state = build_java_initial_state(request)
+    initial_state["backend_context"] = {
+        **dict(initial_state.get("backend_context") or {}),
+        "prompt_artifact_scope": prompt_artifact_scope,
+        "harness_factory": harness_factory,
+    }
+    return workflow_app.invoke(initial_state)
+
+
+def _java_batch_result(
+    request: JavaBatchGenerationRequest, final_state: Dict[str, Any]
+) -> JavaBatchGenerationResult:
     results = final_state.get("results", {})
+    attach_java_test_quality(request.repo_path, results)
     final_error = str(final_state["error"]) if final_state.get("error") else None
     return JavaBatchGenerationResult(
         results=results,

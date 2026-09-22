@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
-from uta.engine.context import ContextQuery
+from uta.shared.context import ContextQuery
+from uta.shared.backends import BackendConstructionRequest
 from uta.language.java.context_builder import ContextBuilder
 from uta.language.java.parse.models import CodeGraph, ProcessFlow
-from uta.engine.targets import TargetRef
+from uta.shared.targets import TargetRef
 
 
 class JavaContextProvider:
@@ -50,3 +51,17 @@ class JavaContextProvider:
 
     def build_for_class(self, class_fqn: str) -> Dict[str, Any]:
         return self.builder.build_for_class(class_fqn)
+
+
+class JavaContextProviderFactory:
+    """Construct Java context with the parsed graph Java requires."""
+
+    required_inputs = frozenset({"graph"})
+    input_descriptions = {"graph": "parsed CodeGraph"}
+
+    def create(self, request: BackendConstructionRequest) -> JavaContextProvider:
+        return JavaContextProvider(
+            request.repo_path,
+            request.require("graph"),
+            list(request.inputs.get("flows") or []),
+        )

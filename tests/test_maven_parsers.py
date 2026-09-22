@@ -1,8 +1,7 @@
 import os
 
-import pytest
-from uta.maven.jacoco import parse_jacoco_report, parse_jacoco_line_coverage_for_classes, extract_uncovered_clusters, format_uncovered_clusters_markdown
-from uta.maven.pitest import (
+from uta.language.java.maven.jacoco import parse_jacoco_report, parse_jacoco_line_coverage_for_classes, extract_uncovered_clusters, format_uncovered_clusters_markdown
+from uta.language.java.maven.pitest import (
     parse_pitest_report,
     compute_mutation_stats,
     summarize_surviving_mutants,
@@ -158,8 +157,8 @@ def test_run_pitest_builds_maven_argv(monkeypatch):
 
         return R()
 
-    monkeypatch.setattr("uta.maven.pitest.subprocess.run", fake_run)
-    from uta.maven.pitest import run_pitest
+    monkeypatch.setattr("uta.language.java.maven.pitest.subprocess.run", fake_run)
+    from uta.language.java.maven.pitest import run_pitest
 
     ok, out = run_pitest("/repo", "com.foo.Bar", "com.foo.BarTest", "biz")
     assert ok
@@ -176,11 +175,11 @@ def test_run_pitest_builds_maven_argv(monkeypatch):
 
 
 def test_parse_pitest_green_suite_failure_extracts_test_and_assertion():
-    from uta.maven.pitest import parse_pitest_green_suite_failure, format_pitest_green_suite_failure
+    from uta.language.java.maven.pitest import parse_pitest_green_suite_failure, format_pitest_green_suite_failure
 
     output = """
 10:48:12 PM PIT >> INFO : Created 1 mutation test units in pre scan
-Description [testClass=com.example.service.PickingServiceTest, name=finishedShouldCreateZeroQtyFlowForUnfinishedDetailsAndUpdateMainFields]
+Description [testClass=com.example.sample.outbound.core.biz.impl.PickingBizImplTest, name=finishedShouldCreateZeroQtyFlowForUnfinishedDetailsAndUpdateMainFields]
 java.lang.AssertionError: expected:<5.000000> but was:<5>
 1 tests did not pass without mutation when calculating line coverage. Mutation testing requires a green suite.
 """
@@ -189,7 +188,7 @@ java.lang.AssertionError: expected:<5.000000> but was:<5>
 
     assert details is not None
     assert details["failing_test_count"] == 1
-    assert details["test_class"] == "com.example.service.PickingServiceTest"
+    assert details["test_class"] == "com.example.sample.outbound.core.biz.impl.PickingBizImplTest"
     assert details["test_method"] == "finishedShouldCreateZeroQtyFlowForUnfinishedDetailsAndUpdateMainFields"
     rendered = format_pitest_green_suite_failure(details)
     assert "mutation testing requires a green suite" in rendered.lower()
@@ -210,9 +209,9 @@ def test_run_pitest_prefers_green_suite_summary_over_truncated_tail(monkeypatch)
 
         return R()
 
-    monkeypatch.setattr("uta.maven.pitest.subprocess.run", fake_run)
+    monkeypatch.setattr("uta.language.java.maven.pitest.subprocess.run", fake_run)
 
-    from uta.maven.pitest import run_pitest
+    from uta.language.java.maven.pitest import run_pitest
 
     ok, out = run_pitest("/repo", "com.foo.Bar", "com.foo.BarTest", "biz")
 
@@ -236,9 +235,9 @@ def test_run_test_with_jacoco_builds_maven_argv(monkeypatch, tmp_path):
             stderr = b""
         return R()
 
-    monkeypatch.setattr("uta.maven.jacoco.subprocess.run", fake_run)
-    monkeypatch.setattr("uta.maven.jacoco.Path.home", lambda: tmp_path)
-    from uta.maven.jacoco import run_test_with_jacoco
+    monkeypatch.setattr("uta.language.java.maven.jacoco.subprocess.run", fake_run)
+    monkeypatch.setattr("uta.language.java.maven.jacoco.Path.home", lambda: tmp_path)
+    from uta.language.java.maven.jacoco import run_test_with_jacoco
 
     ok, _ = run_test_with_jacoco("/repo", "BarTest", "biz")
     assert ok
@@ -266,9 +265,9 @@ def test_run_tests_with_jacoco_batch_builds_maven_argv(monkeypatch, tmp_path):
             stderr = b""
         return R()
 
-    monkeypatch.setattr("uta.maven.jacoco.subprocess.run", fake_run)
-    monkeypatch.setattr("uta.maven.jacoco.Path.home", lambda: tmp_path)
-    from uta.maven.jacoco import run_tests_with_jacoco_batch
+    monkeypatch.setattr("uta.language.java.maven.jacoco.subprocess.run", fake_run)
+    monkeypatch.setattr("uta.language.java.maven.jacoco.Path.home", lambda: tmp_path)
+    from uta.language.java.maven.jacoco import run_tests_with_jacoco_batch
 
     ok, _ = run_tests_with_jacoco_batch("/repo", ["BarTest", "BazTest"], "biz")
     assert ok
@@ -301,9 +300,9 @@ def test_run_test_with_jacoco_deletes_stale_xml_before_run(monkeypatch, tmp_path
             stderr = b""
         return R()
 
-    monkeypatch.setattr("uta.maven.jacoco.subprocess.run", fake_run)
-    monkeypatch.setattr("uta.maven.jacoco.Path.home", lambda: tmp_path)
-    from uta.maven.jacoco import run_test_with_jacoco
+    monkeypatch.setattr("uta.language.java.maven.jacoco.subprocess.run", fake_run)
+    monkeypatch.setattr("uta.language.java.maven.jacoco.Path.home", lambda: tmp_path)
+    from uta.language.java.maven.jacoco import run_test_with_jacoco
 
     ok, _ = run_test_with_jacoco(str(repo), "BarTest", "biz")
     assert ok
@@ -328,9 +327,37 @@ stack line 2</error>
         encoding="utf-8",
     )
 
-    from uta.maven.jacoco import parse_surefire_results
+    from uta.language.java.maven.jacoco import parse_surefire_results
 
     results = parse_surefire_results(str(tmp_path), ["PassTest", "FailTest"], "biz")
     assert results["PassTest"]["passed"] is True
     assert results["FailTest"]["passed"] is False
     assert "broken" in results["FailTest"]["output"]
+
+
+def test_maven_enforcement_runner_collects_failed_surefire_text_reports(tmp_path):
+    reports = tmp_path / "biz" / "target" / "surefire-reports"
+    reports.mkdir(parents=True)
+    report = reports / "com.example.PunchBizImplTest.txt"
+    report.write_text(
+        """-------------------------------------------------------------------------------
+Test set: com.example.PunchBizImplTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.123 s <<< FAILURE! -- in com.example.PunchBizImplTest
+com.example.PunchBizImplTest.handlesEmptyMapping -- Time elapsed: 0.014 s <<< FAILURE!
+java.lang.AssertionError: expected [null] but found [x]
+\tat com.example.PunchBizImplTest.handlesEmptyMapping(PunchBizImplTest.java:631)
+""",
+        encoding="utf-8",
+    )
+
+    from uta.language.java.enforcement_runner import MavenEnforcementRunner
+
+    evidence = MavenEnforcementRunner._with_surefire_failure_evidence({}, tmp_path)
+
+    failures = evidence["failedSurefireTests"]
+    assert failures[0]["className"] == "com.example.PunchBizImplTest"
+    assert failures[0]["testName"] == "com.example.PunchBizImplTest.handlesEmptyMapping"
+    assert "expected [null]" in failures[0]["message"]
+    assert failures[0]["sourceLocation"] == "PunchBizImplTest.java:631"
+    assert failures[0]["reportPath"] == "biz/target/surefire-reports/com.example.PunchBizImplTest.txt"

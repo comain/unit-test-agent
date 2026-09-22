@@ -1,0 +1,487 @@
+{
+  "uta_py_enforce": {
+    "declares_all": true,
+    "names": [
+      "PythonEnforcementBinding",
+      "annotations",
+      "create_python_enforcement_binding"
+    ]
+  },
+  "uta": {
+    "declares_all": false,
+    "names": []
+  },
+  "uta.app": {
+    "declares_all": false,
+    "names": []
+  },
+  "uta.app.commands": {
+    "declares_all": false,
+    "names": []
+  },
+  "uta.app.commands.tasks": {
+    "declares_all": true,
+    "names": [
+      "legacy_clone_path",
+      "prepare_cli_clone",
+      "register_control_commands",
+      "register_create_commands",
+      "register_inspect_commands",
+      "register_reporting_commands",
+      "register_retention_commands"
+    ]
+  },
+  "uta.app.protocols": {
+    "declares_all": true,
+    "names": [
+      "CiCallbackOutcome",
+      "CiContextProvider",
+      "CiProtocol",
+      "CiResult",
+      "ProtocolRegistry",
+      "ProtocolResponse"
+    ]
+  },
+  "uta.app.repair": {
+    "declares_all": true,
+    "names": [
+      "FixSessionRateLimitError",
+      "FixSessionUnsupportedError",
+      "LOGGER",
+      "PENDING_CI_CHECK_SUMMARY",
+      "RERUN_LOCK_STALE_SECONDS",
+      "RUNNING_CI_CHECK_SUMMARY",
+      "RepairSessions"
+    ]
+  },
+  "uta.enforcement": {
+    "declares_all": false,
+    "names": [
+      "coverage_recompute",
+      "enforcement",
+      "test_quality"
+    ]
+  },
+  "uta.enforcement.bindings": {
+    "declares_all": true,
+    "names": [
+      "JavaEnforcementBinding",
+      "UtaPythonEnforcementProxy",
+      "create_java_enforcement_binding"
+    ]
+  },
+  "uta.enforcement.bindings.java": {
+    "declares_all": true,
+    "names": [
+      "JavaEnforcementBinding",
+      "create_java_enforcement_binding"
+    ]
+  },
+  "uta.language": {
+    "declares_all": false,
+    "names": [
+      "java"
+    ]
+  },
+  "uta.language.java": {
+    "declares_all": false,
+    "names": [
+      "enforcement",
+      "enforcement_runner",
+      "maven_project",
+      "test_quality",
+      "workspace"
+    ]
+  },
+  "uta.language.java.compile": {
+    "declares_all": true,
+    "names": [
+      "CATEGORY_DEPRECATED_API",
+      "CATEGORY_MISSING_IMPORT",
+      "CATEGORY_MOCKITO_API",
+      "CATEGORY_OTHER",
+      "CATEGORY_SYNTAX",
+      "CATEGORY_UNRESOLVED_SYMBOL",
+      "CATEGORY_WRONG_TYPE",
+      "CompileError",
+      "classify_compile_errors",
+      "error_delta",
+      "error_signature"
+    ]
+  },
+  "uta.language.java.context_builder": {
+    "declares_all": true,
+    "names": [
+      "ContextBuilder"
+    ]
+  },
+  "uta.language.java.enforcement_runner": {
+    "declares_all": true,
+    "names": [
+      "JAVA_CI_COVERAGE_GATE_PROPERTY",
+      "JAVA_CI_MUTATION_GATE_PROPERTY",
+      "MISSING_EVIDENCE_SUMMARY",
+      "MavenEnforcementRunner"
+    ]
+  },
+  "uta.language.java.generation": {
+    "declares_all": true,
+    "names": [
+      "TargetIdentity",
+      "TaskBudgetExceeded",
+      "_MAX_PLAN_CHARS",
+      "_annotate_out_of_scope_gate_failure",
+      "_attach_java_test_quality",
+      "_batch_complexity_profile",
+      "_candidate_source_path",
+      "_ci_incremental_module_identities_for_batch",
+      "_ci_incremental_modules_for_batch",
+      "_ci_incremental_target_sources_for_batch",
+      "_ci_incremental_target_tests_for_batch",
+      "_class_module",
+      "_clear_generation_plan",
+      "_compile_test",
+      "_compress_plan_for_generation",
+      "_delegated_gate_batch_results",
+      "_delegated_gate_context",
+      "_delegated_gate_failure_matches_batch",
+      "_delegated_gate_failure_stage",
+      "_delegated_quality_gate_feedback",
+      "_delegated_quality_gate_feedback_excerpt",
+      "_delegated_quality_gate_prompt_feedback",
+      "_delegated_target_scoped_maven_command",
+      "_discover_ci_incremental_java_test_files",
+      "_enforcement_evidence_detail",
+      "_expected_ci_incremental_java_test_paths",
+      "_expected_test_file_rel",
+      "_expected_test_paths_for_batch",
+      "_extract_plan_body_from_artifact",
+      "_extract_planned_tests_table",
+      "_failed_maven_modules_from_output",
+      "_failed_test_simple_names_from_output",
+      "_filter_compile_errors_to_paths",
+      "_filter_mutation_families_by_roi",
+      "_flatten_mutation_family_examples",
+      "_format_compile_error_block",
+      "_generation_plan_artifact_classes",
+      "_generation_plan_artifact_session_id",
+      "_generation_plan_candidate_path",
+      "_generation_plan_path",
+      "_git_run",
+      "_index_query_command",
+      "_java_fqn_from_test_path",
+      "_java_gate_failure_summary",
+      "_java_target_selection",
+      "_llm_guard_before",
+      "_load_generation_plan_for_resume",
+      "_maven_artifact_id_for_module",
+      "_merge_phase_timings",
+      "_mutation_enhancement_attempts",
+      "_plan_breadth_replan_reason",
+      "_plan_needs_stricter_replan",
+      "_prepare_continue_artifact_for_phase",
+      "_recover_plan_text_from_session_artifact",
+      "_refresh_test_failure_summary",
+      "_remove_maven_option_with_value",
+      "_render_compile_fix_feedback",
+      "_run_delegated_quality_gate_once",
+      "_run_test",
+      "_run_test_selector",
+      "_sanitize_quality_gate_output",
+      "_select_smart_batch",
+      "_set_stage",
+      "_should_run_mutation",
+      "_should_stop_after",
+      "_source_complexity_summary",
+      "_stage_introspect_section",
+      "_strip_plan_prose",
+      "_sync_task_results_if_available",
+      "_target_alias_update",
+      "_verify_task_branch_and_preexisting_diff",
+      "_write_context_artifact",
+      "_write_generation_plan",
+      "_write_generation_plan_candidate",
+      "_writeback_resolved_symbols",
+      "_xml_child_text",
+      "classify_compile_errors",
+      "compute_mutation_stats",
+      "ensure_stage_introspect_file",
+      "extract_uncovered_clusters",
+      "find_jacoco_report",
+      "find_latest_pitest_report",
+      "format_candidates_markdown",
+      "format_mutation_families_markdown",
+      "format_uncovered_clusters_markdown",
+      "merge_compile_fix_facts",
+      "parse_jacoco_report",
+      "parse_pitest_green_suite_failure",
+      "parse_surefire_results",
+      "resolve_symbols",
+      "run_pitest",
+      "run_tests_with_jacoco_batch",
+      "select_next_class",
+      "summarize_surviving_mutants",
+      "uta_settings"
+    ]
+  },
+  "uta.language.java.maven": {
+    "declares_all": false,
+    "names": [
+      "jacoco",
+      "pitest"
+    ]
+  },
+  "uta.language.java.parse": {
+    "declares_all": false,
+    "names": [
+      "Any",
+      "CacheManager",
+      "CodeGraph",
+      "Dict",
+      "GraphBuilder",
+      "JavaParseProjectResult",
+      "JavaParseProvider",
+      "JavaParser",
+      "List",
+      "Mapping",
+      "Optional",
+      "ParseDiagnostic",
+      "ParseProjectRequest",
+      "ParseResult",
+      "ParsedCallable",
+      "ParsedImport",
+      "Path",
+      "ProcessExtractor",
+      "ProcessFlow",
+      "Sequence",
+      "TargetIdentity",
+      "annotations",
+      "cache",
+      "dataclass",
+      "field",
+      "graph_builder",
+      "java_parser",
+      "models",
+      "process_extractor",
+      "queries"
+    ]
+  },
+  "uta.language.java.phases": {
+    "declares_all": false,
+    "names": []
+  },
+  "uta.language.java.scoring": {
+    "declares_all": false,
+    "names": [
+      "Any",
+      "JavaTargetScorer",
+      "Path",
+      "TargetRef",
+      "TargetScoreResult",
+      "annotations"
+    ]
+  },
+  "uta.language.java.templates": {
+    "declares_all": true,
+    "names": [
+      "SkeletonSpec",
+      "format_stub_catalog_md",
+      "generate_test_skeleton",
+      "get_stub_patterns",
+      "get_stub_patterns_for_deps",
+      "seed_from_project_summary"
+    ]
+  },
+  "uta.language.java.verification": {
+    "declares_all": false,
+    "names": [
+      "JavaVerificationRunner",
+      "annotations"
+    ]
+  },
+  "uta.language.python": {
+    "declares_all": false,
+    "names": []
+  },
+  "uta.language.python.parse": {
+    "declares_all": false,
+    "names": [
+      "Any",
+      "Dict",
+      "List",
+      "Mapping",
+      "Optional",
+      "ParseDiagnostic",
+      "ParseProjectRequest",
+      "ParsedCallable",
+      "ParsedImport",
+      "Path",
+      "PythonLanguageAdapter",
+      "PythonParseProjectResult",
+      "PythonParseProvider",
+      "PythonParseResult",
+      "PythonParser",
+      "RawTargetSelection",
+      "Sequence",
+      "annotations",
+      "dataclass",
+      "field",
+      "json",
+      "models",
+      "parser"
+    ]
+  },
+  "uta.language.python.verification": {
+    "declares_all": false,
+    "names": [
+      "PythonVerificationRunner",
+      "annotations"
+    ]
+  },
+  "uta.reporting": {
+    "declares_all": true,
+    "names": [
+      "Reporter"
+    ]
+  },
+  "uta.shared": {
+    "declares_all": false,
+    "names": [
+      "backends",
+      "ci_models",
+      "config",
+      "fix_sessions",
+      "git",
+      "languages",
+      "parse",
+      "targets",
+      "workspace_policy"
+    ]
+  },
+  "uta.tasks": {
+    "declares_all": true,
+    "names": [
+      "TaskDB",
+      "TaskManager",
+      "default_db_path"
+    ]
+  },
+  "uta.tasks.storage": {
+    "declares_all": false,
+    "names": [
+      "base",
+      "connection",
+      "event_repository",
+      "operation_repository",
+      "scheduler_repository",
+      "schema",
+      "task_repository"
+    ]
+  },
+  "uta.testgen": {
+    "declares_all": false,
+    "names": [
+      "graph",
+      "ports",
+      "progress",
+      "project_summary_artifacts",
+      "spec_context",
+      "targets",
+      "task_guard",
+      "workspace_guard"
+    ]
+  },
+  "uta.testgen.graph": {
+    "declares_all": false,
+    "names": [
+      "state"
+    ]
+  },
+  "uta.testgen.learning": {
+    "declares_all": true,
+    "names": [
+      "TargetLearningKey",
+      "build_project_summary",
+      "check_phase_regression",
+      "load_prior_hints",
+      "load_project_summary",
+      "preseed_compile_context",
+      "record_run_inefficiencies"
+    ]
+  },
+  "uta.testgen.operations": {
+    "declares_all": true,
+    "names": [
+      "ArtifactValidationError",
+      "OperationArtifactStore",
+      "OperationIdentity",
+      "OperationResultEnvelope",
+      "StoredArtifact",
+      "WorkflowCostGate",
+      "WorkflowOperationLedger"
+    ]
+  },
+  "uta.testgen.ports": {
+    "declares_all": false,
+    "names": [
+      "registry"
+    ]
+  },
+  "uta.testgen.prompts": {
+    "declares_all": true,
+    "names": [
+      "CACHE_BOUNDARY_MARKER",
+      "PromptArtifactScope",
+      "PromptArtifactScopeError",
+      "PromptMetadataError",
+      "build_safe_prompt_metadata",
+      "load_prompt",
+      "load_prompt_split",
+      "open_prompt_artifact_scope",
+      "render_prompt",
+      "render_prompt_split"
+    ]
+  },
+  "uta_enforce_core": {
+    "declares_all": true,
+    "names": [
+      "BACKEND",
+      "CommandExecutionError",
+      "CommandRequest",
+      "CommandResult",
+      "CommandRunner",
+      "CommandRunner",
+      "DuplicateBindingError",
+      "EVIDENCE_PREFIX",
+      "EnforcementCapabilities",
+      "EnforcementInvocationContext",
+      "EnforcementLanguageBinding",
+      "EnforcementRegistry",
+      "EnforcementRegistryError",
+      "EnforcementRequest",
+      "EnforcementResult",
+      "EnforcementStatus",
+      "EnforcementTarget",
+      "EnforcementValidationError",
+      "MAX_COMMAND_TIMEOUT_SECONDS",
+      "MAX_TARGETS",
+      "MAX_TEST_PATHS_PER_TARGET",
+      "MAX_TOTAL_TIMEOUT_SECONDS",
+      "MutationSelectionPolicy",
+      "ProgressEvent",
+      "QualityGates",
+      "RuntimeSelection",
+      "SCHEMA_VERSION",
+      "SafeProcessRunner",
+      "TargetEnforcementResult",
+      "UnknownLanguageError",
+      "UnsupportedCapabilityError",
+      "annotations",
+      "enforce",
+      "finalize",
+      "format_evidence_markers",
+      "validate_request",
+      "validate_result"
+    ]
+  }
+}

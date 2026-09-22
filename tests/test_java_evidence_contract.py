@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+from tests.fake_maven_metadata import DIFF_MUTATION_OK, with_resolved_enforcer
 from uta.language.java.enforcement import (
     JAVA_ENFORCEMENT_SCHEMA_VERSION,
     JavaEnforcementStatus,
@@ -38,12 +39,13 @@ def test_java_enforcement_core_wraps_maven_runner_with_schema_and_markers(tmp_pa
     _init_java_repo(repo)
     calls = []
 
+    @with_resolved_enforcer
     def fake_run(cmd, **kwargs):
         calls.append(cmd)
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout="Diff line coverage 100.00% passed\nPIT generated=2 killed=2 survived=0 test-strength=100%",
+            stdout="Diff line coverage 100.00% passed\n" + DIFF_MUTATION_OK,
             stderr="",
         )
 
@@ -74,12 +76,13 @@ def test_java_enforcement_core_honors_configured_base_ref(tmp_path):
     _init_java_repo(repo, base_ref="origin/main")
     calls = []
 
+    @with_resolved_enforcer
     def fake_run(cmd, **kwargs):
         calls.append(cmd)
         return subprocess.CompletedProcess(
             cmd,
             0,
-            stdout="Diff coverage: 100%\nDiff mutation score 100%",
+            stdout="Diff coverage: 100%\n" + DIFF_MUTATION_OK,
             stderr="",
         )
 
@@ -101,11 +104,13 @@ def test_java_enforcement_validation_rejects_wrong_schema_and_stale_head(tmp_pat
     evidence = run_java_enforcement(
         repo_path=repo,
         command="mvn -Dtest.enforcement.enabled=true verify",
-        run_command=lambda cmd, **kwargs: subprocess.CompletedProcess(
-            cmd,
-            0,
-            stdout="Diff coverage: 100%\nDiff mutation score 100%",
-            stderr="",
+        run_command=with_resolved_enforcer(
+            lambda cmd, **kwargs: subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout="Diff coverage: 100%\n" + DIFF_MUTATION_OK,
+                stderr="",
+            )
         ),
     )
 

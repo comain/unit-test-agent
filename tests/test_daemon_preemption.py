@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from uta.tasks.manager import TaskManager
 from uta.tasks.scheduler import TaskScheduler

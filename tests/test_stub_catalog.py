@@ -1,7 +1,6 @@
-"""Tests for uta.templates.stub_catalog (token_opt_phase2 strategy J)."""
+"""Tests for uta.language.java.templates.stub_catalog (token_opt_phase2 strategy J)."""
 
-import pytest
-from uta.templates.stub_catalog import (
+from uta.language.java.templates.stub_catalog import (
     get_stub_patterns,
     get_stub_patterns_for_deps,
     format_stub_catalog_md,

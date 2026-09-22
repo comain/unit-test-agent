@@ -1,11 +1,11 @@
 import pytest
 import respx
 import httpx
-from uta.opencode.client import OpenCodeAuthClient as OpenCodeClient
+from agent_core.harness.client import OpenCodeAuthClient as OpenCodeClient
 
 
 def test_client_base_url_uses_configured_ipv6_host(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_host", "::1")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_host", "::1")
     client = OpenCodeClient(port=4096)
     assert client.base_url == "http://[::1]:4096"
 
@@ -51,7 +51,7 @@ def test_send_message_split_concatenates_into_single_payload():
 
 @respx.mock
 def test_create_session_uses_configured_provider_for_plain_model(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "tencent")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "tencent")
     client = OpenCodeClient(port=4096)
     route = respx.post("http://127.0.0.1:4096/session").mock(
         return_value=httpx.Response(200, json={"id": "session-123"})
@@ -82,7 +82,7 @@ def test_create_session_includes_permission_payload():
 
 @respx.mock
 def test_send_message_uses_configured_provider_for_plain_model(monkeypatch):
-    monkeypatch.setattr("uta.config.settings.opencode_provider", "tencent")
+    monkeypatch.setattr("uta.shared.config.settings.opencode_provider", "tencent")
     client = OpenCodeClient(port=4096)
     route = respx.post("http://127.0.0.1:4096/session/session-123/message").mock(
         return_value=httpx.Response(200, json={"info": {"role": "assistant", "id": "msg-456"}})
@@ -96,7 +96,7 @@ def test_send_message_uses_configured_provider_for_plain_model(monkeypatch):
 
 @respx.mock
 def test_send_message_includes_configured_variant(monkeypatch):
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_variant", "none")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_variant", "none")
     client = OpenCodeClient(port=4096)
     route = respx.post("http://127.0.0.1:4096/session/session-123/message").mock(
         return_value=httpx.Response(200, json={"info": {"role": "assistant", "id": "msg-456"}})
@@ -323,7 +323,9 @@ def test_detect_rate_limit_issue_reads_uta_persisted_debug_logs(tmp_path):
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(OpenCodeClient, "_opencode_log_dir", staticmethod(lambda: tmp_path / "missing-opencode-log"))
-        mp.setattr(OpenCodeClient, "_uta_debug_log_dir", classmethod(lambda cls: debug_log_dir))
+        # Renamed in agent-core, which is product-neutral. Same method, same
+        # role: where this client looks for persisted debug logs.
+        mp.setattr(OpenCodeClient, "_debug_log_dir", classmethod(lambda cls: debug_log_dir))
         detected = client.detect_rate_limit_issue("ses_debug")
 
     assert detected is not None
@@ -769,8 +771,8 @@ def test_analyze_session_tokens_splits_main_and_small(monkeypatch):
     ]
 
     monkeypatch.setattr(client, "get_messages", lambda sid: messages)
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_small_model", "openrouter/z-ai/glm-5.1")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_model", "openai/gpt-5.4")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_small_model", "openrouter/z-ai/glm-5.1")
 
     usage = client.analyze_session_tokens("session-123")
 
@@ -814,8 +816,8 @@ def test_analyze_session_tokens_reads_root_level_tokens(monkeypatch):
     ]
 
     monkeypatch.setattr(client, "get_messages", lambda sid: messages)
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_small_model", "")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_model", "openai/gpt-5.4")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_small_model", "")
 
     usage = client.analyze_session_tokens("session-123")
 
@@ -828,7 +830,7 @@ def test_analyze_session_tokens_reads_root_level_tokens(monkeypatch):
 
 
 def test_analyze_session_tokens_prefers_persisted_messages(monkeypatch):
-    from uta.opencode.client import OpenCodeClient as StreamOpenCodeClient
+    from agent_core.harness.client import OpenCodeClient as StreamOpenCodeClient
 
     client = StreamOpenCodeClient(repo_path="/tmp/repo", port=4096)
     session_id = client.create_session(model_id="openai/gpt-5.4")
@@ -861,8 +863,8 @@ def test_analyze_session_tokens_prefers_persisted_messages(monkeypatch):
     ]
 
     monkeypatch.setattr(client, "get_messages", lambda sid: messages)
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_small_model", "")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_model", "openai/gpt-5.4")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_small_model", "")
 
     usage = client.analyze_session_tokens(session_id)
 
@@ -873,7 +875,7 @@ def test_analyze_session_tokens_prefers_persisted_messages(monkeypatch):
 
 
 def test_stream_analyze_session_tokens_reads_root_level_tokens(monkeypatch):
-    from uta.opencode.client import OpenCodeClient as StreamOpenCodeClient
+    from agent_core.harness.client import OpenCodeClient as StreamOpenCodeClient
 
     client = StreamOpenCodeClient(repo_path="/tmp/repo", port=4096)
     session_id = client.create_session(model_id="openai/gpt-5.4")
@@ -893,8 +895,8 @@ def test_stream_analyze_session_tokens_reads_root_level_tokens(monkeypatch):
     ]
 
     monkeypatch.setattr(client, "get_messages", lambda sid: messages)
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_small_model", "")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_model", "openai/gpt-5.4")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_small_model", "")
 
     usage = client.analyze_session_tokens(session_id)
 
@@ -905,7 +907,7 @@ def test_stream_analyze_session_tokens_reads_root_level_tokens(monkeypatch):
 
 
 def test_analyze_session_tokens_falls_back_to_accumulated_tokens(monkeypatch):
-    from uta.opencode.client import OpenCodeClient as StreamOpenCodeClient
+    from agent_core.harness.client import OpenCodeClient as StreamOpenCodeClient
 
     client = StreamOpenCodeClient(repo_path="/tmp/repo", port=4096)
     session_id = client.create_session(model_id="openai/gpt-5.4")
@@ -919,8 +921,8 @@ def test_analyze_session_tokens_falls_back_to_accumulated_tokens(monkeypatch):
     client._sessions[session_id].turn_texts = ["first", "second"]
 
     monkeypatch.setattr(client, "get_messages", lambda sid: (_ for _ in ()).throw(RuntimeError("boom")))
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_model", "openai/gpt-5.4")
-    monkeypatch.setattr("uta.opencode.client.settings.opencode_small_model", "")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_model", "openai/gpt-5.4")
+    monkeypatch.setattr("agent_core.harness.client.settings.opencode_small_model", "")
 
     usage = client.analyze_session_tokens(session_id)
 

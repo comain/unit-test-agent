@@ -1,10 +1,7 @@
 """Tests for benchmark/estimates/estimator.py (Task 11)."""
 import sys
-import json
-import tempfile
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "benchmark" / "estimates"))
 from estimator import estimate, _count_java_classes, _regression_estimate, COST_PER_CLASS

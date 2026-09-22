@@ -1,7 +1,6 @@
-"""Tests for uta.templates.test_skeleton (K strategy — deterministic skeleton generation)."""
+"""Tests for uta.language.java.templates.test_skeleton (K strategy — deterministic skeleton generation)."""
 
-import pytest
-from uta.templates.test_skeleton import (
+from uta.language.java.templates.test_skeleton import (
     SkeletonSpec,
     generate_test_skeleton,
     spec_from_context_md,

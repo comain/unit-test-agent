@@ -1,5 +1,9 @@
 # Migration Plan: Programmatic OpenCode Spawning & Event Streaming
 
+> **Historical design record.** This captures the state and intent at the time it
+> was written; package paths and line references describe the tree as it was then.
+> For current structure see [design/architecture.md](../design/architecture.md).
+
 ## 1. Executive Summary
 Currently, `unit-test-agent` (UTA) connects to a pre-running OpenCode server via HTTP. It uses inefficient polling (fetching the entire message history every 3 seconds) to detect completions and resorts to brittle disk-log scraping to detect rate limits. 
 

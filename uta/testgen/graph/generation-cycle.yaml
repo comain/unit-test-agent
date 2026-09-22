@@ -1,0 +1,1129 @@
+# The language-neutral lifecycle inside one target-generation batch.
+#
+# Language backends supply the mechanics: Java compiles with Maven and measures
+# mutation with PIT, while Python verifies syntax/tests with pytest and mutation
+# with mutmut. A backend may report an unsupported measurement as `skipped`, but
+# it must not replace this lifecycle with an agent-specific conversation loop.
+#
+# ## How to read this file
+#
+# Every phase expands to a fixed shape, so the file is long but uniform.
+#
+#   model-driven:   <phase>_turn_reconcile -> _prompt -> _turn -> _interpret_reconcile
+#                   -> _interpret, with _turn_rehydrate / _result_rehydrate as the
+#                   resume paths that must never re-enter the model
+#   deterministic:  <phase>_reconcile -> _run, with _rehydrate as the resume path
+#
+# A reconcile node decides whether an interrupted operation should run again,
+# be reused, or be treated as unsafe. Rehydrate nodes restore an existing
+# envelope and never call the prompt, model or interpreter again -- that is what
+# makes a resumed run cheap instead of a repeat of everything already paid for.
+#
+# Every branch carries a `default`. Without one, a selector returning a key
+# nobody mapped is an error at build time rather than a run that stops
+# somewhere unexplained.
+#
+# Repair routes are bounded by construction: each repair phase routes `retry`
+# back to itself and `exhausted` to completion, so the attempt budget in state
+# is what ends the loop, never the graph's shape.
+#
+# `operator_phase` is the label a person sees. Several nodes share one: the
+# prompt, turn and interpret of `plan_tests` all report as `plan_tests`. Node
+# mechanics are internal; the phase label set is a contract.
+name: test-generation-cycle
+
+nodes:
+  - name: precheck_existing_tests_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: precheck_existing_tests
+      step: deterministic
+      operator_phase: precheck_existing_tests
+  - name: precheck_existing_tests_run
+    uses: generation_operation
+    config:
+      phase: precheck_existing_tests
+      operator_phase: precheck_existing_tests
+  - name: precheck_existing_tests_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: precheck_existing_tests
+      step: deterministic
+      operator_phase: precheck_existing_tests
+  - name: plan_tests_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: plan_tests
+      step: turn
+      operator_phase: plan_tests
+  - name: plan_tests_prompt
+    uses: generation_prompt
+    config:
+      phase: plan_tests
+      operator_phase: plan_tests
+  - name: plan_tests_turn
+    uses: agent_turn
+    config:
+      label: plan_tests
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: planning_timeout_seconds
+      operator_phase: plan_tests
+  - name: plan_tests_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: plan_tests
+      step: turn
+      operator_phase: plan_tests
+  - name: plan_tests_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: plan_tests
+      step: interpret
+      operator_phase: plan_tests
+  - name: plan_tests_interpret
+    uses: generation_interpret
+    config:
+      phase: plan_tests
+      operator_phase: plan_tests
+  - name: plan_tests_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: plan_tests
+      step: interpret
+      operator_phase: plan_tests
+  - name: generate_tests_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: generate_tests
+      step: turn
+      operator_phase: generate_tests
+  - name: generate_tests_prompt
+    uses: generation_prompt
+    config:
+      phase: generate_tests
+      operator_phase: generate_tests
+  - name: generate_tests_turn
+    uses: agent_turn
+    config:
+      label: generate_tests
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: timeout_seconds
+      operator_phase: generate_tests
+  - name: generate_tests_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: generate_tests
+      step: turn
+      operator_phase: generate_tests
+  - name: generate_tests_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: generate_tests
+      step: interpret
+      operator_phase: generate_tests
+  - name: generate_tests_interpret
+    uses: generation_interpret
+    config:
+      phase: generate_tests
+      operator_phase: generate_tests
+  - name: generate_tests_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: generate_tests
+      step: interpret
+      operator_phase: generate_tests
+  - name: verify_compile_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: verify_compile
+      step: deterministic
+      operator_phase: verify_compile
+  - name: verify_compile_run
+    uses: generation_operation
+    config:
+      phase: verify_compile
+      operator_phase: verify_compile
+  - name: verify_compile_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: verify_compile
+      step: deterministic
+      operator_phase: verify_compile
+  - name: fix_compile_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_compile
+      step: turn
+      operator_phase: fix_compile
+  - name: fix_compile_prompt
+    uses: generation_prompt
+    config:
+      phase: fix_compile
+      operator_phase: fix_compile
+  - name: fix_compile_turn
+    uses: agent_turn
+    config:
+      label: fix_compile
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: compile_fix_timeout_seconds
+      operator_phase: fix_compile
+  - name: fix_compile_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_compile
+      step: turn
+      operator_phase: fix_compile
+  - name: fix_compile_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_compile
+      step: interpret
+      operator_phase: fix_compile
+  - name: fix_compile_interpret
+    uses: generation_interpret
+    config:
+      phase: fix_compile
+      operator_phase: fix_compile
+  - name: fix_compile_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_compile
+      step: interpret
+      operator_phase: fix_compile
+  - name: verify_tests_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: verify_tests
+      step: deterministic
+      operator_phase: verify_tests
+  - name: verify_tests_run
+    uses: generation_operation
+    config:
+      phase: verify_tests
+      operator_phase: verify_tests
+  - name: verify_tests_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: verify_tests
+      step: deterministic
+      operator_phase: verify_tests
+  - name: fix_tests_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_tests
+      step: turn
+      operator_phase: fix_tests
+  - name: fix_tests_prompt
+    uses: generation_prompt
+    config:
+      phase: fix_tests
+      operator_phase: fix_tests
+  - name: fix_tests_turn
+    uses: agent_turn
+    config:
+      label: fix_tests
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: repair_timeout_seconds
+      operator_phase: fix_tests
+  - name: fix_tests_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_tests
+      step: turn
+      operator_phase: fix_tests
+  - name: fix_tests_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_tests
+      step: interpret
+      operator_phase: fix_tests
+  - name: fix_tests_interpret
+    uses: generation_interpret
+    config:
+      phase: fix_tests
+      operator_phase: fix_tests
+  - name: fix_tests_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_tests
+      step: interpret
+      operator_phase: fix_tests
+  - name: measure_coverage_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: measure_coverage
+      step: deterministic
+      operator_phase: measure_coverage
+  - name: measure_coverage_run
+    uses: generation_operation
+    config:
+      phase: measure_coverage
+      operator_phase: measure_coverage
+  - name: measure_coverage_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: measure_coverage
+      step: deterministic
+      operator_phase: measure_coverage
+  - name: fix_coverage_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_coverage
+      step: turn
+      operator_phase: fix_coverage
+  - name: fix_coverage_prompt
+    uses: generation_prompt
+    config:
+      phase: fix_coverage
+      operator_phase: fix_coverage
+  - name: fix_coverage_turn
+    uses: agent_turn
+    config:
+      label: fix_coverage
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: repair_timeout_seconds
+      operator_phase: fix_coverage
+  - name: fix_coverage_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_coverage
+      step: turn
+      operator_phase: fix_coverage
+  - name: fix_coverage_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_coverage
+      step: interpret
+      operator_phase: fix_coverage
+  - name: fix_coverage_interpret
+    uses: generation_interpret
+    config:
+      phase: fix_coverage
+      operator_phase: fix_coverage
+  - name: fix_coverage_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_coverage
+      step: interpret
+      operator_phase: fix_coverage
+  - name: measure_mutation_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: measure_mutation
+      step: deterministic
+      operator_phase: measure_mutation
+  - name: measure_mutation_run
+    uses: generation_operation
+    config:
+      phase: measure_mutation
+      operator_phase: measure_mutation
+  - name: measure_mutation_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: measure_mutation
+      step: deterministic
+      operator_phase: measure_mutation
+  - name: fix_mutation_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_mutation
+      step: turn
+      operator_phase: fix_mutation
+  - name: fix_mutation_prompt
+    uses: generation_prompt
+    config:
+      phase: fix_mutation
+      operator_phase: fix_mutation
+  - name: fix_mutation_turn
+    uses: agent_turn
+    config:
+      label: fix_mutation
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: repair_timeout_seconds
+      operator_phase: fix_mutation
+  - name: fix_mutation_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_mutation
+      step: turn
+      operator_phase: fix_mutation
+  - name: fix_mutation_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: fix_mutation
+      step: interpret
+      operator_phase: fix_mutation
+  - name: fix_mutation_interpret
+    uses: generation_interpret
+    config:
+      phase: fix_mutation
+      operator_phase: fix_mutation
+  - name: fix_mutation_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: fix_mutation
+      step: interpret
+      operator_phase: fix_mutation
+  - name: delegated_quality_gate_verify_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: delegated_quality_gate_verify
+      step: deterministic
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_verify_run
+    uses: generation_operation
+    config:
+      phase: delegated_quality_gate_verify
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_verify_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: delegated_quality_gate_verify
+      step: deterministic
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: delegated_quality_gate
+      step: turn
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_prompt
+    uses: generation_prompt
+    config:
+      phase: delegated_quality_gate
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_turn
+    uses: agent_turn
+    config:
+      label: delegated_quality_gate
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: repair_timeout_seconds
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: delegated_quality_gate
+      step: turn
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: delegated_quality_gate
+      step: interpret
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_interpret
+    uses: generation_interpret
+    config:
+      phase: delegated_quality_gate
+      operator_phase: delegated_quality_gate
+  - name: delegated_quality_gate_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: delegated_quality_gate
+      step: interpret
+      operator_phase: delegated_quality_gate
+  - name: review_equivalent_mutants_turn_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: review_equivalent_mutants
+      step: turn
+      operator_phase: review_equivalent_mutants
+  - name: review_equivalent_mutants_prompt
+    uses: generation_prompt
+    config:
+      phase: review_equivalent_mutants
+      operator_phase: review_equivalent_mutants
+  - name: review_equivalent_mutants_turn
+    uses: agent_turn
+    config:
+      label: review_equivalent_mutants
+      result_mode: normalized
+      session_scope: phase
+      progress_detail: public_detail
+      on_failure: skip
+      timeout_seconds:
+        from_state: equivalence_review_timeout_seconds
+      operator_phase: review_equivalent_mutants
+  - name: review_equivalent_mutants_turn_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: review_equivalent_mutants
+      step: turn
+      operator_phase: review_equivalent_mutants
+  - name: review_equivalent_mutants_interpret_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: review_equivalent_mutants
+      step: interpret
+      operator_phase: review_equivalent_mutants
+  - name: review_equivalent_mutants_interpret
+    uses: generation_interpret
+    config:
+      phase: review_equivalent_mutants
+      operator_phase: review_equivalent_mutants
+  - name: review_equivalent_mutants_result_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: review_equivalent_mutants
+      step: interpret
+      operator_phase: review_equivalent_mutants
+  - name: complete_generation_reconcile
+    uses: reconcile_generation_operation
+    config:
+      phase: complete_generation
+      step: deterministic
+      operator_phase: complete_generation
+  - name: complete_generation_run
+    uses: generation_operation
+    config:
+      phase: complete_generation
+      operator_phase: complete_generation
+  - name: complete_generation_rehydrate
+    uses: rehydrate_generation_operation
+    config:
+      phase: complete_generation
+      step: deterministic
+      operator_phase: complete_generation
+  - name: pause_generation
+    uses: pause_generation
+    config:
+      operator_phase: complete_generation
+  - name: terminate_generation
+    uses: terminate_generation
+    config:
+      operator_phase: complete_generation
+
+entry: precheck_existing_tests_reconcile
+
+edges:
+  - [plan_tests_prompt, plan_tests_turn]
+  - [generate_tests_prompt, generate_tests_turn]
+  - [fix_compile_prompt, fix_compile_turn]
+  - [fix_tests_prompt, fix_tests_turn]
+  - [fix_coverage_prompt, fix_coverage_turn]
+  - [fix_mutation_prompt, fix_mutation_turn]
+  - [delegated_quality_gate_prompt, delegated_quality_gate_turn]
+  - [review_equivalent_mutants_prompt, review_equivalent_mutants_turn]
+  - [complete_generation_run, __end__]
+  - [complete_generation_rehydrate, __end__]
+  - [terminate_generation, __end__]
+
+branches:
+  - from: precheck_existing_tests_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: precheck_existing_tests_run
+      retry_no_effect: precheck_existing_tests_run
+      reuse_result: precheck_existing_tests_rehydrate
+      adopt_result: precheck_existing_tests_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: precheck_existing_tests_run
+    selector: precheck_outcome
+    routes:
+      proceed: plan_tests_turn_reconcile
+      plan_skipped: generate_tests_turn_reconcile
+      existing_repair: verify_compile_reconcile
+      skip_target: complete_generation_reconcile
+      delegated_repair: delegated_quality_gate_verify_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: precheck_existing_tests_rehydrate
+    selector: precheck_outcome
+    routes:
+      proceed: plan_tests_turn_reconcile
+      plan_skipped: generate_tests_turn_reconcile
+      existing_repair: verify_compile_reconcile
+      skip_target: complete_generation_reconcile
+      delegated_repair: delegated_quality_gate_verify_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: plan_tests_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: plan_tests_prompt
+      retry_no_effect: plan_tests_prompt
+      reuse_result: plan_tests_turn_rehydrate
+      adopt_result: plan_tests_turn_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: plan_tests_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: plan_tests_interpret_reconcile
+      cancelled: pause_generation
+    default: plan_tests_interpret_reconcile
+  - from: plan_tests_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: plan_tests_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: plan_tests_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: plan_tests_interpret
+      retry_no_effect: plan_tests_interpret
+      reuse_result: plan_tests_result_rehydrate
+      adopt_result: plan_tests_result_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: plan_tests_interpret
+    selector: plan_outcome
+    routes:
+      passed: generate_tests_turn_reconcile
+      retry: plan_tests_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: plan_tests_result_rehydrate
+    selector: plan_outcome
+    routes:
+      passed: generate_tests_turn_reconcile
+      retry: plan_tests_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: generate_tests_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: generate_tests_prompt
+      retry_no_effect: generate_tests_prompt
+      reuse_result: generate_tests_turn_rehydrate
+      adopt_result: generate_tests_turn_rehydrate
+      verify_existing_edit: verify_compile_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: generate_tests_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: generate_tests_interpret_reconcile
+      cancelled: pause_generation
+    default: generate_tests_interpret_reconcile
+  - from: generate_tests_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: generate_tests_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: generate_tests_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: generate_tests_interpret
+      retry_no_effect: generate_tests_interpret
+      reuse_result: generate_tests_result_rehydrate
+      adopt_result: generate_tests_result_rehydrate
+      verify_existing_edit: verify_compile_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: generate_tests_interpret
+    selector: generation_outcome
+    routes:
+      passed: verify_compile_reconcile
+      retry: generate_tests_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: generate_tests_result_rehydrate
+    selector: generation_outcome
+    routes:
+      passed: verify_compile_reconcile
+      retry: generate_tests_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: verify_compile_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: verify_compile_run
+      retry_no_effect: verify_compile_run
+      reuse_result: verify_compile_rehydrate
+      adopt_result: verify_compile_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: verify_compile_run
+    selector: compile_outcome
+    routes:
+      passed: verify_tests_reconcile
+      repair: fix_compile_turn_reconcile
+      skipped: verify_tests_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: verify_compile_rehydrate
+    selector: compile_outcome
+    routes:
+      passed: verify_tests_reconcile
+      repair: fix_compile_turn_reconcile
+      skipped: verify_tests_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_compile_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_compile_prompt
+      retry_no_effect: fix_compile_prompt
+      reuse_result: fix_compile_turn_rehydrate
+      adopt_result: fix_compile_turn_rehydrate
+      verify_existing_edit: verify_compile_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_compile_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: fix_compile_interpret_reconcile
+      cancelled: pause_generation
+    default: fix_compile_interpret_reconcile
+  - from: fix_compile_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: fix_compile_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: fix_compile_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_compile_interpret
+      retry_no_effect: fix_compile_interpret
+      reuse_result: fix_compile_result_rehydrate
+      adopt_result: fix_compile_result_rehydrate
+      verify_existing_edit: verify_compile_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_compile_interpret
+    selector: fix_compile_outcome
+    routes:
+      passed: verify_compile_reconcile
+      retry: fix_compile_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_compile_result_rehydrate
+    selector: fix_compile_outcome
+    routes:
+      passed: verify_compile_reconcile
+      retry: fix_compile_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: verify_tests_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: verify_tests_run
+      retry_no_effect: verify_tests_run
+      reuse_result: verify_tests_rehydrate
+      adopt_result: verify_tests_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: verify_tests_run
+    selector: test_outcome
+    routes:
+      passed: measure_coverage_reconcile
+      delegated: delegated_quality_gate_verify_reconcile
+      repair: fix_tests_turn_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: verify_tests_rehydrate
+    selector: test_outcome
+    routes:
+      passed: measure_coverage_reconcile
+      delegated: delegated_quality_gate_verify_reconcile
+      repair: fix_tests_turn_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_tests_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_tests_prompt
+      retry_no_effect: fix_tests_prompt
+      reuse_result: fix_tests_turn_rehydrate
+      adopt_result: fix_tests_turn_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_tests_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: fix_tests_interpret_reconcile
+      cancelled: pause_generation
+    default: fix_tests_interpret_reconcile
+  - from: fix_tests_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: fix_tests_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: fix_tests_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_tests_interpret
+      retry_no_effect: fix_tests_interpret
+      reuse_result: fix_tests_result_rehydrate
+      adopt_result: fix_tests_result_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_tests_interpret
+    selector: fix_tests_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: fix_tests_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_tests_result_rehydrate
+    selector: fix_tests_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: fix_tests_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: measure_coverage_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: measure_coverage_run
+      retry_no_effect: measure_coverage_run
+      reuse_result: measure_coverage_rehydrate
+      adopt_result: measure_coverage_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: measure_coverage_run
+    selector: coverage_outcome
+    routes:
+      passed: measure_mutation_reconcile
+      repair: fix_coverage_turn_reconcile
+      continue: measure_mutation_reconcile
+      skipped: measure_mutation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: measure_coverage_rehydrate
+    selector: coverage_outcome
+    routes:
+      passed: measure_mutation_reconcile
+      repair: fix_coverage_turn_reconcile
+      continue: measure_mutation_reconcile
+      skipped: measure_mutation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_coverage_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_coverage_prompt
+      retry_no_effect: fix_coverage_prompt
+      reuse_result: fix_coverage_turn_rehydrate
+      adopt_result: fix_coverage_turn_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_coverage_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: fix_coverage_interpret_reconcile
+      cancelled: pause_generation
+    default: fix_coverage_interpret_reconcile
+  - from: fix_coverage_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: fix_coverage_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: fix_coverage_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_coverage_interpret
+      retry_no_effect: fix_coverage_interpret
+      reuse_result: fix_coverage_result_rehydrate
+      adopt_result: fix_coverage_result_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_coverage_interpret
+    selector: fix_coverage_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: fix_coverage_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_coverage_result_rehydrate
+    selector: fix_coverage_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: fix_coverage_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: measure_mutation_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: measure_mutation_run
+      retry_no_effect: measure_mutation_run
+      reuse_result: measure_mutation_rehydrate
+      adopt_result: measure_mutation_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: measure_mutation_run
+    selector: mutation_outcome
+    routes:
+      review_equivalence: review_equivalent_mutants_turn_reconcile
+      passed: delegated_quality_gate_verify_reconcile
+      repair: fix_mutation_turn_reconcile
+      tests_failed: fix_tests_turn_reconcile
+      skipped: delegated_quality_gate_verify_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: measure_mutation_rehydrate
+    selector: mutation_outcome
+    routes:
+      review_equivalence: review_equivalent_mutants_turn_reconcile
+      passed: delegated_quality_gate_verify_reconcile
+      repair: fix_mutation_turn_reconcile
+      tests_failed: fix_tests_turn_reconcile
+      skipped: delegated_quality_gate_verify_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_mutation_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_mutation_prompt
+      retry_no_effect: fix_mutation_prompt
+      reuse_result: fix_mutation_turn_rehydrate
+      adopt_result: fix_mutation_turn_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_mutation_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: fix_mutation_interpret_reconcile
+      cancelled: pause_generation
+    default: fix_mutation_interpret_reconcile
+  - from: fix_mutation_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: fix_mutation_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: fix_mutation_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: fix_mutation_interpret
+      retry_no_effect: fix_mutation_interpret
+      reuse_result: fix_mutation_result_rehydrate
+      adopt_result: fix_mutation_result_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: fix_mutation_interpret
+    selector: fix_mutation_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: fix_mutation_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: fix_mutation_result_rehydrate
+    selector: fix_mutation_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: fix_mutation_turn_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: delegated_quality_gate_verify_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: delegated_quality_gate_verify_run
+      retry_no_effect: delegated_quality_gate_verify_run
+      reuse_result: delegated_quality_gate_verify_rehydrate
+      adopt_result: delegated_quality_gate_verify_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: delegated_quality_gate_verify_run
+    selector: delegated_quality_outcome
+    routes:
+      review_equivalence: review_equivalent_mutants_turn_reconcile
+      passed: complete_generation_reconcile
+      repair: delegated_quality_gate_turn_reconcile
+      skipped: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: delegated_quality_gate_verify_rehydrate
+    selector: delegated_quality_outcome
+    routes:
+      review_equivalence: review_equivalent_mutants_turn_reconcile
+      passed: complete_generation_reconcile
+      repair: delegated_quality_gate_turn_reconcile
+      skipped: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: delegated_quality_gate_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: delegated_quality_gate_prompt
+      retry_no_effect: delegated_quality_gate_prompt
+      reuse_result: delegated_quality_gate_turn_rehydrate
+      adopt_result: delegated_quality_gate_turn_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: delegated_quality_gate_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: delegated_quality_gate_interpret_reconcile
+      cancelled: pause_generation
+    default: delegated_quality_gate_interpret_reconcile
+  - from: delegated_quality_gate_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: delegated_quality_gate_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: delegated_quality_gate_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: delegated_quality_gate_interpret
+      retry_no_effect: delegated_quality_gate_interpret
+      reuse_result: delegated_quality_gate_result_rehydrate
+      adopt_result: delegated_quality_gate_result_rehydrate
+      verify_existing_edit: verify_tests_reconcile
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: delegated_quality_gate_interpret
+    selector: delegated_quality_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: delegated_quality_gate_turn_reconcile
+      skipped: complete_generation_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: delegated_quality_gate_result_rehydrate
+    selector: delegated_quality_outcome
+    routes:
+      passed: verify_tests_reconcile
+      retry: delegated_quality_gate_turn_reconcile
+      skipped: complete_generation_reconcile
+      exhausted: complete_generation_reconcile
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: complete_generation_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: complete_generation_run
+      retry_no_effect: complete_generation_run
+      reuse_result: complete_generation_rehydrate
+      adopt_result: complete_generation_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: review_equivalent_mutants_turn_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: review_equivalent_mutants_prompt
+      retry_no_effect: review_equivalent_mutants_prompt
+      reuse_result: review_equivalent_mutants_turn_rehydrate
+      adopt_result: review_equivalent_mutants_turn_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: review_equivalent_mutants_turn
+    selector: normalized_turn_outcome
+    routes:
+      continue: review_equivalent_mutants_interpret_reconcile
+      cancelled: pause_generation
+    default: review_equivalent_mutants_interpret_reconcile
+  - from: review_equivalent_mutants_turn_rehydrate
+    selector: rehydration_outcome
+    routes:
+      ready: review_equivalent_mutants_interpret_reconcile
+    default: complete_generation_reconcile
+  - from: review_equivalent_mutants_interpret_reconcile
+    selector: reconciliation_outcome
+    routes:
+      run: review_equivalent_mutants_interpret
+      retry_no_effect: review_equivalent_mutants_interpret
+      reuse_result: review_equivalent_mutants_result_rehydrate
+      adopt_result: review_equivalent_mutants_result_rehydrate
+      verify_existing_edit: terminate_generation
+      fail_indeterminate: terminate_generation
+      fail_unsafe: terminate_generation
+    default: terminate_generation
+  - from: review_equivalent_mutants_interpret
+    selector: review_equivalent_mutants_outcome
+    routes:
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: review_equivalent_mutants_result_rehydrate
+    selector: review_equivalent_mutants_outcome
+    routes:
+      failed: complete_generation_reconcile
+    default: complete_generation_reconcile
+  - from: pause_generation
+    selector: resume_phase
+    routes:
+      precheck_existing_tests: precheck_existing_tests_reconcile
+      plan_tests: plan_tests_turn_reconcile
+      generate_tests: generate_tests_turn_reconcile
+      verify_compile: verify_compile_reconcile
+      fix_compile: fix_compile_turn_reconcile
+      verify_tests: verify_tests_reconcile
+      fix_tests: fix_tests_turn_reconcile
+      measure_coverage: measure_coverage_reconcile
+      fix_coverage: fix_coverage_turn_reconcile
+      measure_mutation: measure_mutation_reconcile
+      fix_mutation: fix_mutation_turn_reconcile
+      delegated_quality_gate: delegated_quality_gate_turn_reconcile
+      review_equivalent_mutants: review_equivalent_mutants_turn_reconcile
+    default: complete_generation_reconcile

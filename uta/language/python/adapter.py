@@ -1,12 +1,27 @@
+"""Python's implementations of the narrow language ports.
+
+Detection, target normalization, and the prompt bundle -- one method per port
+declared in `uta.shared.languages` -- plus two Python-only capabilities
+(`scan_candidates` / `select_candidates`, which walk the tree for testable
+files) and the generation cycle binding that `uta.testgen.graph.durable_cycle`
+still reaches through the registry.
+
+What used to also live here -- `capabilities()`, `generated_test_policy()`,
+`workspace_policy()`, `test_generation_backend()`, `batch_generator()` -- is
+gone. The first two had no reader at all; the last three duplicated entries
+that `uta.shared.backends` already resolves by string, and were reachable only
+through fallbacks that the backend table never lets run.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from uta.engine.languages import DetectionSignal, GeneratedTestPolicy, LanguageCapabilities, PromptBundle, RawTargetSelection
-from uta.engine.targets import TargetRef
+from uta.language.python.prompt_bundle import python_prompt_bundle
+from uta.shared.languages import DetectionSignal, PromptBundle, RawTargetSelection
+from uta.shared.targets import TargetRef
 
 
 _PYTHON_MARKERS = ("pyproject.toml", "requirements.txt", "requirements-dev.txt", "setup.py", "setup.cfg", "tox.ini", "noxfile.py")
@@ -40,17 +55,9 @@ class PythonTargetSelection:
 class PythonLanguageAdapter:
     language = "python"
 
-    def capabilities(self) -> LanguageCapabilities:
-        return LanguageCapabilities(
-            supports_function_targets=True,
-            supports_branch_coverage=True,
-            supports_mutation=True,
-            supports_incremental_diff_enforcement=True,
-            supports_import_safety_hints=True,
-            generated_tests_are_autopushable=True,
-        )
-
     def detect(self, repo_path: Path, changed_paths: Optional[Sequence[str]] = None) -> DetectionSignal:
+        from uta.shared.source_selection import iter_all_source_files
+
         reasons = []
         for marker in _PYTHON_MARKERS:
             if (repo_path / marker).exists():
@@ -58,10 +65,26 @@ class PythonLanguageAdapter:
         if changed_paths:
             reasons.extend(path for path in changed_paths if str(path).endswith(".py"))
         elif not reasons:
-            for py_file in _iter_production_python_files(repo_path):
-                reasons.append(str(py_file.relative_to(repo_path)))
-                break
+            reasons.extend(iter_all_source_files(self, str(repo_path))[:1])
         return DetectionSignal(self.language, len(reasons), reasons)
+
+    def is_production_source_path(self, path: str) -> bool:
+        normalized = str(path or "").strip().replace("\\", "/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        if not normalized.endswith(".py") or normalized.startswith("/"):
+            return False
+        parts = [part for part in normalized.split("/") if part]
+        if not parts or any(part == ".." for part in parts):
+            return False
+        if parts[0] in {"tests", "test"}:
+            return False
+        if set(parts) & _EXCLUDED_PARTS:
+            return False
+        name = parts[-1]
+        if name == "__init__.py" or name.startswith("test_"):
+            return False
+        return True
 
     def normalize_target(self, raw: RawTargetSelection) -> TargetRef:
         source_path, symbol, granularity = _parse_python_selection(raw)
@@ -80,11 +103,12 @@ class PythonLanguageAdapter:
         return self.select_candidates(repo_path).targets
 
     def select_candidates(self, repo_path: Path, *, max_files: int = DEFAULT_MAX_FILES) -> PythonTargetSelection:
+        from uta.shared.source_selection import iter_all_source_files
+
         targets = []
         skipped: List[Dict[str, Any]] = []
         max_files = max(1, int(max_files or DEFAULT_MAX_FILES))
-        for py_file in _iter_production_python_files(repo_path):
-            relative = py_file.relative_to(repo_path).as_posix()
+        for relative in iter_all_source_files(self, str(repo_path)):
             target = self.normalize_target(RawTargetSelection(target=relative))
             if len(targets) < max_files:
                 targets.append(target)
@@ -98,58 +122,28 @@ class PythonLanguageAdapter:
                 )
         return PythonTargetSelection(targets=targets, skipped_targets=skipped, max_files=max_files)
 
-    def generated_test_policy(self, repo_path: Path, target: Optional[TargetRef]) -> GeneratedTestPolicy:
-        return GeneratedTestPolicy(
-            language=self.language,
-            allowed_test_roots=("tests", "tests/uta_generated"),
-            autopushable=True,
-        )
-
     def prompt_bundle(self) -> PromptBundle:
-        return PromptBundle(
-            language=self.language,
-            plan="python_plan_tests",
-            generate="python_generate_test",
-            fix_compile="python_fix_compile",
-            fix_coverage="python_fix_coverage",
-            fix_mutations="python_fix_mutations",
+        return python_prompt_bundle()
+
+    def generation_cycle_binding(self, state):
+        from uta.language.python.cycle_inputs import prepare_python_cycle_state
+        from uta.language.python.generation_backend import PythonGenerationCycleBackend
+        from uta.testgen.harness import create_agent_harness
+        from uta.testgen.backend import GenerationCycleBinding
+
+        context = dict(state.get("backend_context") or {})
+        harness_factory = context.get("harness_factory")
+        if callable(harness_factory):
+            runner = harness_factory(Path(str(state["repo_path"])))
+        else:
+            runner = create_agent_harness()
+        return GenerationCycleBinding(
+            initial_state=prepare_python_cycle_state(state),
+            backend=PythonGenerationCycleBackend(
+                enforcer=context.get("enforcer")
+            ),
+            runner=runner,
         )
-
-
-def _is_production_python_file(path: Path, repo_path: Path) -> bool:
-    try:
-        relative = path.relative_to(repo_path)
-    except ValueError:
-        return False
-    parts = set(relative.parts)
-    if parts & _EXCLUDED_PARTS:
-        return False
-    if relative.parts and relative.parts[0] in {"tests", "test"}:
-        return False
-    if path.name == "__init__.py":
-        return False
-    return not path.name.startswith("test_")
-
-
-def _iter_production_python_files(repo_path: Path):
-    for root, dirnames, filenames in os.walk(repo_path):
-        root_path = Path(root)
-        try:
-            relative_root = root_path.relative_to(repo_path)
-        except ValueError:
-            continue
-        root_parts = relative_root.parts
-        dirnames[:] = sorted(
-            dirname
-            for dirname in dirnames
-            if dirname not in _EXCLUDED_PARTS and not (not root_parts and dirname in {"tests", "test"})
-        )
-        for filename in sorted(filenames):
-            if not filename.endswith(".py"):
-                continue
-            py_file = root_path / filename
-            if _is_production_python_file(py_file, repo_path):
-                yield py_file
 
 
 def _normalize_source_path(source_path: str) -> str:

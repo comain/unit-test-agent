@@ -1,12 +1,8 @@
 """Test that stage_started and stage_completed events are paired in task_events."""
 
-import json
-import sqlite3
-import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-import pytest
 
 from uta.tasks.db import TaskDB
 from uta.tasks.manager import TaskManager
@@ -55,12 +51,12 @@ def test_set_stage_auto_closes_previous_stage(tmp_path, monkeypatch):
         "current_batch": [],
     }
 
-    from uta.graph.nodes import _set_stage
+    from uta.testgen.progress import set_stage
 
-    _set_stage(state, "plan_tests", "batch=1")
+    set_stage(state, "plan_tests", "batch=1")
     # Advance to generate — should close plan_tests
     state["current_stage"] = "plan_tests"
-    _set_stage(state, "generate", "batch=1")
+    set_stage(state, "generate", "batch=1")
 
     started = _events(db, tid, "stage_started")
     completed = _events(db, tid, "stage_completed")

@@ -71,11 +71,11 @@ Usage: `docs/usage-opencode-provider-fallback.md`
   - Verify: `rg -n "UTA_OPENCODE_PROVIDER_CHAIN|UTA_OPENCODE_PROVIDER_TOKENS" docs README.md`
   - Files: `docs/spec-opencode-provider-fallback.md`, `docs/design-opencode-provider-fallback.md`, `docs/usage-opencode-provider-fallback.md`, optional `README.md`
 
-- [x] Task 11: Final verification and the server rollout.
-  - Acceptance: full tests pass; the server deploy uses git pull; fallback-disabled first-candidate behavior and controlled fallback are verified.
-  - Verify: `python3 -m pytest`; the server readyz; controlled task event inspection with `uta tasks show`.
-  - Evidence: local full suite `923 passed, 9 skipped`; the server git pull from `933df24` to `4febdb6`; public health/readyz green; controlled fallback selected `openai/gpt-5.4` after recording stop/resume events.
+- [x] Task 11: Final verification and node2 rollout.
+  - Acceptance: full tests pass; node2 deploy uses git pull; fallback-disabled first-candidate behavior and controlled fallback are verified.
+  - Verify: `python3 -m pytest`; node2 readyz; controlled task event inspection with `uta tasks show`.
+  - Evidence: local full suite `923 passed, 9 skipped`; node2 git pull from `933df24` to `4febdb6`; public health/readyz green; controlled fallback selected `openai/gpt-5.4` after recording stop/resume events.
   - Files: none expected unless evidence notes are recorded.
 
 - [x] Checkpoint: Ready for review.
-  - Verify: all tests pass, docs match behavior, the server evidence recorded, no token leaks.
+  - Verify: all tests pass, docs match behavior, node2 evidence recorded, no token leaks.

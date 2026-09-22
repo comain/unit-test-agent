@@ -1,0 +1,64 @@
+You are reviewing surviving mutants that repeated test repair could not kill.
+Decide, for each mutant, whether it is EQUIVALENT: whether the mutated program is observably identical to the original for every possible input and state within the target's supported public behavior.
+
+This is a review, not a repair.
+- Do not edit, create, or delete any tracked file. Do not change tests, production code, build files, or verifier configuration.
+- Do not run mutation tools, coverage, Maven, or broad test suites.
+- You may read source files and tests to support your argument.
+- When an authoritative mutation diff is provided, review that exact transformation. Do not infer or substitute a different mutation from the operator name, mutant key, or current source.
+- Your only output is one JSON file, written to: `{{ verdicts_path }}`
+
+Use the supported public behavior as the observability boundary:
+- A difference exposed only by monkey-patching, instrumentation, or overriding a private or protected implementation method is not a killable public behavior difference.
+- A method whose name begins with `_` is private or protected unless repository documentation or an established test contract makes it a documented extension point.
+- A supported public subclass extension point, public callback, or externally visible collaborator call may distinguish a mutant; name that contract and the distinguishing input explicitly.
+- Do not invent implementation-introspection assertions merely to distinguish raw values that the shipped implementation consumes identically.
+
+For each mutant give exactly one verdict:
+- `equivalent`: no input or state can distinguish the mutant from the original.
+- `killable`: some input distinguishes them. Name that input in `why_indistinguishable`.
+- `uncertain`: you cannot prove either. When in doubt, choose `uncertain`.
+
+An `equivalent` verdict MUST argue over the whole divergence region, not from examples:
+1. `divergence_region`: the complete set of inputs or states where the mutated construct behaves differently from the original (for example, where a mutated predicate takes a different truth value). Consider inputs the current tests never use.
+2. `why_indistinguishable`: why EVERY input in that region still produces the same observable result: return value, raised exceptions, side effects, and any state a test can see.
+3. `source_lines`: the line numbers that back the argument.
+An argument that only checks one or a few example inputs is not a proof. Use `uncertain` instead.
+
+Worked example of an acceptable `equivalent` argument (Python, `or` -> `and`):
+
+    def text_similarity(left: str, right: str) -> float:
+        a, b = normalize_text(left), normalize_text(right)
+        if not a or not b:          # mutant: `not a and not b`
+            return 0.0
+        sequence = SequenceMatcher(None, a, b).ratio()
+        grams_a = {a[i:i + 2] for i in range(max(1, len(a) - 1))}
+        grams_b = {b[i:i + 2] for i in range(max(1, len(b) - 1))}
+        jaccard = len(grams_a & grams_b) / len(grams_a | grams_b) if grams_a | grams_b else 0.0
+        return max(sequence, jaccard)
+
+- divergence_region: the predicates differ only when exactly one of `a`, `b` is empty. When both are empty or both are non-empty, they agree.
+- why_indistinguishable: with `a == ""` and `b` non-empty, `SequenceMatcher.ratio()` is `2*0/len(b) = 0.0`. `grams_a == {""}`, and every element of `grams_b` is non-empty, so the intersection is empty while the union is not: jaccard is 0.0 and the function returns 0.0. The swapped case is symmetric. No exception or side effect differs.
+A test such as `text_similarity("", "ab") == 0.0` alone would NOT have been a sufficient argument.
+
+Current mutation score: {{ mutation_rate }}% (gate {{ mutation_gate }}%).
+
+Mutants to review:
+{% for mutant in mutants %}
+- key: `{{ mutant.key }}`
+  file: `{{ mutant.source_path }}` line {{ mutant.line }}
+  operator: {{ mutant.operator }}
+  mutation: {{ mutant.description }}
+{% if mutant.mutation_diff %}
+  authoritative mutation diff:
+```diff
+{{ mutant.mutation_diff }}
+```
+{% endif %}
+{% endfor %}
+
+Write `{{ verdicts_path }}` with exactly this shape. Include every key above exactly once:
+
+{"verdicts": [{"key": "<key>", "verdict": "equivalent|killable|uncertain", "divergence_region": "...", "why_indistinguishable": "...", "source_lines": [1, 2]}]}
+
+Then stop.

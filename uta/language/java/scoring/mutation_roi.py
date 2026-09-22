@@ -13,18 +13,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional
 
-MUTATION_ROI_VERSION = "2026-04-21-v1"
+from uta.enforcement.mutation_roi import (
+    effort_band as _effort_band,
+    family_effort as _family_effort,
+    mutation_roi_score,
+)
 
-# Family → effort delta added on top of method base effort.
-_FAMILY_EFFORT_DELTA = {
-    "boundary": 0,
-    "conditional": 0,
-    "return_value": 0,
-    "math": 0,
-    "negation": 0,
-    "side_effect": 2,
-    "other": 1,
-}
+MUTATION_ROI_VERSION = "2026-04-21-v1"
 
 # Method-name tokens that typically produce equivalent side-effect mutants.
 _GETTER_TOKENS = ("get", "is", "has", "size", "length", "count", "hash", "tostring", "equals")
@@ -55,22 +50,6 @@ def _likely_equivalent(method_name: str, family: str, detail: str) -> bool:
                 if idx < len(method_name) and method_name[idx].isupper():
                     return True
     return False
-
-
-def _family_effort(base_effort: int, family: str, detail: str) -> int:
-    delta = _FAMILY_EFFORT_DELTA.get(family, 1)
-    # Removed-call on void methods adds observability difficulty.
-    if "removed call" in (detail or "").lower():
-        delta += 1
-    return max(1, int(base_effort) + delta)
-
-
-def _effort_band(score: int) -> str:
-    if score <= 2:
-        return "cheap"
-    if score <= 5:
-        return "medium"
-    return "expensive"
 
 
 def _method_effort_lookup(method_efforts: Optional[Iterable[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
@@ -113,7 +92,7 @@ def score_families(
         count = int(fam.get("count", 0) or 0)
         equivalent = _likely_equivalent(simple, family, first_detail)
 
-        roi = 0.0 if equivalent else round((count * kill) / max(effort, 1), 2)
+        roi = 0.0 if equivalent else mutation_roi_score(count, kill, effort)
 
         fam["effort_score"] = effort
         fam["effort_band"] = _effort_band(effort)
@@ -133,3 +112,10 @@ def roi_sort_key(fam: Dict[str, Any]):
         fam.get("method", ""),
         (fam.get("lines") or [0])[0],
     )
+
+# Re-exported on purpose: these names are imported from this module
+# elsewhere in the tree. Declaring them makes that a contract rather than
+# an accident, and lets the linter tell a re-export from a dead import.
+__all__ = [
+    "_family_effort",
+]

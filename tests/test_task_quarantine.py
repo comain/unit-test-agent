@@ -1,10 +1,6 @@
 """Tests for task quarantine, budget_exceeded, and unblock (Tasks 5+6)."""
-import pytest
-import sqlite3
-import tempfile
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 def _make_db(tmp_path):
@@ -80,7 +76,7 @@ class TestAutoQuarantine:
         tid = _create_task(mgr, tmp_path)
         mgr.start_task(tid)
 
-        with patch("uta.config.settings") as mock_settings:
+        with patch("uta.shared.config.settings") as mock_settings:
             mock_settings.quarantine_threshold = 2
             # First failure — should stay FAILED
             mgr.mark_failed(tid, "error #1")
@@ -100,7 +96,7 @@ class TestAutoQuarantine:
         tid = _create_task(mgr, tmp_path)
         mgr.start_task(tid)
 
-        with patch("uta.config.settings") as mock_settings:
+        with patch("uta.shared.config.settings") as mock_settings:
             mock_settings.quarantine_threshold = 0
             mgr.mark_failed(tid, "error")
             task = mgr.get_task(tid)

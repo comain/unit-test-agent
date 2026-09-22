@@ -1,9 +1,6 @@
 """Tests for uta.language.java.symbol_resolver (token_opt_phase2 strategy K)."""
 
-import os
 import textwrap
-import tempfile
-from pathlib import Path
 
 import pytest
 from uta.language.java.symbol_resolver import (

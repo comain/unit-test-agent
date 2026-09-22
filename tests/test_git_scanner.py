@@ -1,11 +1,9 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from uta.engine.source_selection import (
+from uta.testgen.source_selection import (
     filter_files,
-    get_all_java_files,
-    get_all_python_files,
-    get_changed_java_files,
-    get_changed_python_files,
+    get_all_source_files,
+    get_changed_source_files,
 )
 
 @pytest.fixture
@@ -23,7 +21,7 @@ def test_get_changed_java_files_no_module(mock_git_log):
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout=mock_git_log, check_returncode=lambda: None)
         
-        files = get_changed_java_files("/fake/repo", days=30)
+        files = get_changed_source_files("java", "/fake/repo", days=30)
         
         # Should exclude: Service1Test.java (src/test), non-java-file.txt
         # Should include: Service1.java (2 times), Service2.java, CommonUtils.java
@@ -37,7 +35,7 @@ def test_get_changed_java_files_with_module(mock_git_log):
         mock_run.return_value = MagicMock(stdout=mock_git_log, check_returncode=lambda: None)
         
         # Filter by 'biz' module
-        files = get_changed_java_files("/fake/repo", days=30, module="biz")
+        files = get_changed_source_files("java", "/fake/repo", days=30, module="biz")
         
         # Should only include Service1 and Service2 (CommonUtils is in common module)
         assert len(files) == 2
@@ -66,7 +64,7 @@ def test_get_all_java_files(tmp_path):
     (tmp_path / "biz/src/test/java/com/example/ATest.java").write_text("class ATest {}")
     (tmp_path / "common/src/main/java/com/example/C.java").write_text("class C {}")
 
-    assert get_all_java_files(str(tmp_path), module="biz") == [
+    assert get_all_source_files("java", str(tmp_path), module="biz") == [
         ("biz/src/main/java/com/example/A.java", 1),
         ("biz/src/main/java/com/example/B.java", 1),
     ]
@@ -86,7 +84,7 @@ README.md
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout=git_log, check_returncode=lambda: None)
 
-        files = get_changed_python_files("/fake/repo", days=14)
+        files = get_changed_source_files("python", "/fake/repo", days=14)
 
     assert files == [
         ("jobs/forecast.py", 2),
@@ -105,7 +103,7 @@ def test_get_all_python_files_uses_stable_production_filter(tmp_path):
     (tmp_path / ".venv" / "lib").mkdir(parents=True)
     (tmp_path / ".venv" / "lib" / "vendored.py").write_text("def ignored():\n    return 1\n", encoding="utf-8")
 
-    assert get_all_python_files(str(tmp_path)) == [
+    assert get_all_source_files("python", str(tmp_path)) == [
         ("jobs/a.py", 1),
         ("jobs/b.py", 1),
     ]

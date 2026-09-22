@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from uta.engine.validation import PlanCallable, PlanContext
+from uta.shared.validation import PlanCallable, PlanContext
 
 
 class JavaMarkdownPlanContextExtractor:

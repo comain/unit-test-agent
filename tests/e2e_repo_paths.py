@@ -1,4 +1,4 @@
-"""Configurable paths for pipeline E2E tests."""
+"""Configurable paths for pipeline E2E tests — avoid hardcoding only sample/wms."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import List, Optional, Tuple
 
 
 def primary_repo_path() -> str:
-    """Primary Java repo for the main E2E block (default: sample-service)."""
+    """Primary Java repo for the main E2E block (default: sample-inbound-core)."""
     return os.path.abspath(
-        os.path.expanduser(os.environ.get("UTA_E2E_REPO", "~/src/sample-service"))
+        os.path.expanduser(os.environ.get("UTA_E2E_REPO", "~/wms/sample-inbound-core"))
     )
 
 
@@ -31,9 +31,9 @@ def infer_java_module(
 ) -> str:
     """Pick a Maven reactor module that contains ``src/main/java``.
 
-    Prefers ``biz`` when present (matches many multi-module service layouts).
+    Prefers ``biz`` when present (matches most internal multi-module layouts).
 
-    :param explicit_env: if set, read this env var first (e.g. ``UTA_E2E_SERVICE_A_MODULE``).
+    :param explicit_env: if set, read this env var first (e.g. ``UTA_E2E_PLATFORM_MODULE``).
     :param use_global_module_env: if True (and ``explicit_env`` unset), honor ``UTA_E2E_MODULE``.
     """
     if explicit_env:
@@ -65,7 +65,7 @@ def module_main_java(repo_root: str, module: str) -> Path:
 
 
 def pick_service_like_class_for_context(graph) -> Optional[str]:
-    """Pick a concrete class suitable for ``ContextBuilder.build_for_class``."""
+    """Pick a concrete class suitable for ``ContextBuilder.build_for_class`` (not sample-specific)."""
     for fqn, node in graph.nodes.items():
         if node.kind != "class":
             continue
@@ -85,28 +85,28 @@ def pick_service_like_class_for_context(graph) -> Optional[str]:
 def cross_repo_matrix() -> List[Tuple[str, str, str, Optional[str]]]:
     """(label, resolved_repo_path, repo_env, module_env) for extra org repos.
 
-    Defaults: ``~/src/service-a``, ``~/src/service-b``.
-    Override paths with ``UTA_E2E_SERVICE_A_REPO`` / ``UTA_E2E_SERVICE_B_REPO``; modules with
-    ``UTA_E2E_SERVICE_A_MODULE`` / ``UTA_E2E_SERVICE_B_MODULE``.
+    Defaults: ``~/platform/sample-baseinfo-product``, ``~/tms/tms-order-core``.
+    Override paths with ``UTA_E2E_PLATFORM_REPO`` / ``UTA_E2E_TMS_REPO``; modules with
+    ``UTA_E2E_PLATFORM_MODULE`` / ``UTA_E2E_TMS_MODULE``.
     """
     rows = [
         (
-            "service_a",
+            "platform",
             os.environ.get(
-                "UTA_E2E_SERVICE_A_REPO",
-                os.path.expanduser("~/src/service-a"),
+                "UTA_E2E_PLATFORM_REPO",
+                os.path.expanduser("~/platform/sample-baseinfo-product"),
             ),
-            "UTA_E2E_SERVICE_A_REPO",
-            "UTA_E2E_SERVICE_A_MODULE",
+            "UTA_E2E_PLATFORM_REPO",
+            "UTA_E2E_PLATFORM_MODULE",
         ),
         (
-            "service_b",
+            "tms",
             os.environ.get(
-                "UTA_E2E_SERVICE_B_REPO",
-                os.path.expanduser("~/src/service-b"),
+                "UTA_E2E_TMS_REPO",
+                os.path.expanduser("~/tms/tms-order-core"),
             ),
-            "UTA_E2E_SERVICE_B_REPO",
-            "UTA_E2E_SERVICE_B_MODULE",
+            "UTA_E2E_TMS_REPO",
+            "UTA_E2E_TMS_MODULE",
         ),
     ]
     return [

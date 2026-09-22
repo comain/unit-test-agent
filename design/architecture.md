@@ -2,128 +2,120 @@
 
 ## Purpose
 
-UTA automates test generation for Java and Python repositories by combining:
+UTA is two products that share one contract.
 
-- language-specific static analysis
-- OpenCode-driven code generation and repair
-- local verification gates for compile, tests, coverage, and mutation
-- post-run reporting and session assessment
+**Enforcement** is a deterministic gate over a git diff. It scores changed
+production lines for coverage and mutation and decides pass or fail. No model is
+involved anywhere in it, and it runs without an agent, a key, or a network.
 
-The system is optimized for large legacy services where coverage is hard to raise with one-shot prompting, while keeping language-specific parsing and enforcement behind explicit package boundaries.
+**Generation** is an LLM agent that selects targets, builds distilled context,
+writes tests, and repairs them until the gate passes.
 
-## Main Components
+The gate never consults a model; the agent never decides whether it succeeded.
+Everything below follows from that split. The system is optimised for large
+legacy services where coverage is hard to raise with one-shot prompting, so
+language-specific parsing and enforcement stay behind explicit package
+boundaries.
 
-### `uta/cli.py`
+## Package Map
 
-CLI entrypoint for:
+### `uta/app/`
 
-- `uta run`
-- `uta scan`
-- `uta parse`
-- `uta assess`
+Composition roots and every user-facing surface.
 
-`uta run` owns the top-level workflow orchestration and report display.
-`uta assess` is the lightweight postmortem surface for OpenCode session analysis.
+- `cli.py`: Click entry point. Commands: `run`, `scan`, `parse`, `enforce`,
+  `python-enforce`, `python-mutant-diffs`, `query-index`, `assess`, `tasks`.
+- `enforcement_commands.py`, `generation_commands.py`, `index_commands.py`,
+  `assessment_commands.py`, `task_commands.py`: command groups.
+- `commands/tasks/`: task subcommand implementations.
+- `routes.py`, `service.py`: the FastAPI trigger service.
+- `protocols/`: pluggable protocol adapters (`github.py`, `rdc.py`, `factory.py`)
+  owning inbound trigger, signature verification, result callback, and issue
+  context.
+- `agent_core_pin.py`: startup guard refusing a mismatched agent-core.
+- `enforcement_composition.py`: the only module naming both enforcement bindings.
 
-### `uta/graph/`
+### `uta/testgen/`
 
-Workflow orchestration layer.
+The language-neutral generation half.
 
-- `workflow.py`: LangGraph wiring
-- `nodes.py`: operational nodes for branch setup, parsing, planning, generation, compile/test/coverage/mutation validation, and repair loops
-- `state.py`: workflow state contract
+- `graph/`: the declarative cycle — `generation-cycle.yaml`, state, routing, and
+  thin node exports. `application.py` runs it as a durable, checkpointed
+  application over agent-core invocation APIs.
+- `runner.py`: batch dispatcher resolved through the configured adapter.
+- `prompts/`: domain prompt templates and the loader. Values live here; strict
+  rendering and secure materialization belong to agent-core.
+- `operations/`: product-owned operation ledger and result-artifact facade for
+  crash reconciliation.
+- `context.py`, `project_summary/`, `source_selection.py`, `targets.py`,
+  `scoring.py`, `wave_assigner.py`: target selection and context assembly.
+- `cutover.py`, `standalone_execution.py`, `workspace_guard.py`: workspace
+  guards, durable fingerprints, and owner-only ephemeral identity for taskless
+  runs.
 
-The workflow keeps the heavy local verification outside the model, and sends only distilled repair prompts back into OpenCode.
+### `uta/language/<language>/`
 
-### `uta/language/<language>/parse/`
+Everything a language knows about itself, behind a common target model.
 
-Language-specific static analysis built on `tree-sitter`.
+- `parse/`: `tree-sitter` static analysis. Java discovers classes, methods,
+  dependency graphs and process flows; Python discovers files, functions,
+  classes, imports and side-effect hints. This powers both repo-wide context
+  export and per-target distilled context under `.uta_cache/context/`.
+- `adapter.py`: detection, target normalization, prompt bundle, generated-test
+  policy.
+- `batch.py`, `generation_backend.py`, `phases/`: the language's mapping onto
+  the shared lifecycle stages.
+- `context.py`, `context_builder/`, `project_summary.py`: context providers.
+- `verification/`: Java runs Maven, JUnit, JaCoCo and PIT; Python runs pytest,
+  coverage.py and mutmut.
+- `maven/` (Java): JaCoCo and PIT execution and parsing, plus uncovered-cluster
+  and survivor-family extraction for repair prompts. Deterministic
+  preprocessing belongs here whenever it is cheaper than an LLM turn.
+- `enforcement.py`, `ci.py`: enforcement evidence and the CI repair handler.
 
-- `uta/language/java/parse/`: Java class and method discovery, dependency graph construction, process-flow extraction, and cached parse artifacts
-- `uta/language/python/parse/`: Python file/function/class discovery, import and side-effect hints, and target context extraction
+Backends register independent capabilities in
+`uta/composition/language_backends.py`. Context and project-summary factories
+declare their own construction inputs, so adding a language adds no conditionals
+to shared workflow code.
 
-This layer powers both repo-wide context export and per-target distilled context files.
+### `tools/python-enforcement/` and `uta/enforcement/`
 
-### `uta/batch/`
+The deterministic half.
 
-Language-specific generation entrypoints behind a shared request/result contract.
+- `tools/python-enforcement/uta_enforce_core/`: the sole enforcement contract —
+  request, normalised result and evidence, validation, the command-runner port,
+  an immutable registry, and one stateless `enforce()`. It depends on nothing
+  above it.
+- `tools/python-enforcement/uta_py_enforce/`: the canonical Python
+  implementation — coverage, mutation, candidate planning, mutmut adapters and
+  test selection.
+- `uta/enforcement/`: UTA's side of the contract. `bindings/` holds the Java
+  binding and a thin proxy to the distributed Python one; the proxy adds
+  UTA-owned policy and delegates exactly once, reimplementing no part of the
+  algorithm.
 
-- `base.py`: language-neutral `BatchGenerationRequest`, `BatchGenerationResult`, and generator protocol
-- `java/`: facade for the existing Java LangGraph workflow and Maven/JaCoCo/PIT gates
-- `python/`: Python OpenCode generation, generated pytest placement, and pytest/coverage/mutmut verifier handoff
+### `uta/reporting/`
 
-Java generation logic is still implemented by the established workflow nodes; the Java batch facade owns invocation and state construction so later extraction can happen without changing CLI or task contracts.
-
-### `uta/context/`
-
-Context-building layer.
-
-- repo scans and candidate selection
-- repo summary generation
-- target-specific context files under `.uta_cache/context/`
-
-Important target artifacts include:
-
-- `ClassName.context.md`
-- `ClassName.symbols.md`
-- planning- or repair-oriented cache files as the workflow evolves
-
-### `uta/opencode/`
-
-OpenCode integration layer.
-
-- server bootstrap
-- provider config generation
-- session/message lifecycle
-- provider limit detection
-- token/session retrospect mining
-
-UTA supports multiple providers through OpenCode-compatible configuration, including:
-
-- `openrouter/*`
-- `google/*`
-- `openai/*`
-- `cursor/*` and plain Cursor model names when `UTA_OPENCODE_PROVIDER=cursor`
-- `tencent/*` and plain Tencent model names when `UTA_OPENCODE_PROVIDER=tencent`
-- `ollama/*`
-
-The default runtime configuration uses `tencent/glm-5` for both the main and small model unless the environment overrides it.
-
-Cursor support is plugin-based rather than API-key based. UTA writes the OpenCode config expected by [`opencode-cursor-oauth`](https://github.com/ephraimduncan/opencode-cursor): a top-level `plugin` entry plus a `provider.cursor` stub so OpenCode keeps the provider in its catalog.
-For OpenCode `1.14.x`, UTA also performs a best-effort repair of the Cursor plugin cache layout when the plugin is already installed globally, because `opencode auth login --provider cursor` resolves plugins from `~/.cache/opencode/packages/...` and some installs leave that cache entry empty.
-
-### `uta/maven/`
-
-Local verification utilities.
-
-- Jacoco execution and parsing
-- Pitest execution and parsing
-- uncovered-cluster and survivor-family extraction for repair prompts
-
-This layer is where deterministic preprocessing should live when analysis can be done more cheaply than an LLM turn.
-
-### `uta/output/`
-
-Report assembly and terminal display.
-
-Outputs include:
-
-- JSON summary reports under `.uta_reports/`
-- timing details
-- token usage
-- mutation breakdowns
-- retrospect hints
+Report assembly and terminal display: JSON summary reports under
+`.uta_reports/`, timing details, token usage, mutation breakdowns and retrospect
+hints.
 
 ### `uta/tasks/`
 
-Production task-management layer for long-running repo backfills.
+Production task management for long-running repo backfills.
 
-- `db.py`: local SQLite schema, branch/task/class/event/control/heartbeat storage
-- `manager.py`: create, queue, stop, resume, cancel, reprioritize, stage, and result-sync operations
-- `scheduler.py`: daemon acquisition with same-repo locking and runner heartbeat updates
-- `render.py`: terminal, JSON, and auto-refreshing HTML status output
+- `db.py`: SQLite schema — branch, task, class, event, control and heartbeat
+  storage.
+- `manager.py`: create, queue, stop, resume, cancel, reprioritize, stage and
+  result-sync operations.
+- `scheduler.py`: daemon acquisition with same-repo locking and heartbeat
+  updates.
+- `render.py`: terminal, JSON and auto-refreshing HTML status output.
+- `accounting/`: immutable operation accounting. Task code never opens an
+  agent-local database or derives currency cost from tokens.
 
-The task DB is the production source of truth. `uta run --production --task-id <id>` executes a task while updating stage transitions and final metrics. `uta tasks daemon` polls the DB and invokes that production entrypoint for runnable tasks.
+The task DB is the production source of truth. `uta tasks daemon` polls it and
+runs the production entrypoint for runnable tasks.
 
 ```mermaid
 erDiagram
@@ -149,72 +141,104 @@ stateDiagram-v2
   QUEUED --> CANCELLED: cancel
 ```
 
-Live status data flows from workflow stage updates, class result sync, task events, and runner heartbeats into `.uta_reports/live_status.json` and `.uta_reports/status.html`. Config snapshots are stored on `repo_tasks`; daemon-process settings such as DB path, runner home, OpenCode spawn environment, and polling intervals require daemon restart, while task priority and control-table actions are observed from SQLite without restart.
+Live status flows from workflow stage updates, class result sync, task events
+and runner heartbeats into `.uta_reports/live_status.json` and
+`.uta_reports/status.html`. Config snapshots are stored on `repo_tasks`;
+daemon-process settings such as DB path, runner home, harness spawn environment
+and polling interval require a daemon restart, while task priority and
+control-table actions are observed from SQLite without one.
+
+### `uta/shared/` and `uta/composition/`
+
+`shared/` holds the settings model (`config.py`), the common target and CI
+models, and cross-cutting git/delivery helpers. `composition/` wires backends
+and persistence at the entry points.
+
+## Boundaries
+
+Three boundaries decide where code goes. `scripts/check_package_dependencies.py
+--check` enforces them on every commit, and every current exception is listed
+with an owner and the slice that removes it.
+
+**agent-core owns running an agent.** Harness selection, workspace preparation,
+readiness, bootstrap, sessions, turns, provider fallback, cancellation,
+progress, cleanup, and the Git operations underneath. UTA names no concrete
+harness — there is no `OpenCodeProcess` and no auth client in product code — so
+selecting a different agent is configuration, not a code change. If UTA needs a
+capability agent-core lacks, agent-core gains it, is released, and UTA pins the
+release.
+
+**`uta_enforce_core` is the sole enforcement contract.** Every caller goes
+through it. Neither `uta enforce` nor the local client runs its own gate.
+
+**`tools/python-enforcement/` is a distribution, not a subdirectory.** Nothing in
+it may import `uta` or `agent_core`, so a third party can sparse-checkout that
+path alone and run it. A test proves this by copying the tree out, scrubbing
+site-packages, and confirming `uta` is unimportable before running the gate.
 
 ## Workflow Shape
 
-The current high-level flow is:
+Generation is deliberately not one long agent conversation. The durable engine
+splits a run into phase-specific agent turns, so a mutation-repair round does not
+inherit unrelated planning or generation history.
 
-1. create/reset working branch from `origin/master`
-2. baseline compile and environment normalization
-3. parse repository and export context
-4. select target classes
-5. create OpenCode session
-6. plan test approach
-7. generate tests
-8. run compile/test/coverage/mutation gates
-9. run focused repair rounds when needed
-10. write final report
+1. prepare workspace and validate the baseline
+2. select targets and export distilled context
+3. per target batch: plan, generate, then verify compile, tests, coverage and
+   mutation, with a focused repair session for each gate that fails
+4. deliver the target and move to the next
+5. finalize and write the report
 
-In production mode, the same workflow runs inside a repo task:
+Java and Python execute the same declarative cycle with stable batch IDs, SQLite
+checkpoints and a product operation ledger, so a crashed run resumes rather than
+restarting. Provider fallback is turn-bounded inside the phase session: each
+candidate gets an isolated conversation and failed candidates are closed before
+the next opens, so the task is never requeued to switch provider.
 
-1. `uta tasks create` records selection, priority, branch reuse, config snapshot, budget snapshot, and optional child class rows.
-2. `uta tasks daemon` atomically acquires the highest-priority runnable repo task that is not blocked by same-repo locking.
-3. `uta run --production --task-id <id>` reuses the task branch, mirrors `_set_stage` transitions into `task_events`, and syncs final class metrics/session IDs/token counters back into SQLite.
-4. `.uta_reports/live_status.json` and `.uta_reports/status.html` are refreshed for operator monitoring.
+Prompt artifacts never live in the target repository. They resolve under
+`$UTA_RUNNER_HOME/workflow-state/prompts`, owner-only and mode `0600`, and a
+configured root inside the target checkout is rejected.
 
-### Key Design Choices
+### Key design choices
 
-#### 1. Distilled target context before broad exploration
+**Distilled context before broad exploration.** Target-specific context files are
+exported before planning so the model starts from structured facts instead of
+rereading large sources.
 
-The workflow exports target-specific context files before planning or generation so the model can start from structured facts rather than rereading large source files immediately.
+**Local verification is authoritative.** Compile, test, coverage and mutation
+results are decided by local tools, never by model self-report.
 
-#### 2. Local verification is authoritative
+**Focused repair loops.** Each failing gate opens its own narrow repair round, so
+the model receives a specific packet rather than a generic "try again".
 
-Compile, test, Jacoco, and Pitest are always decided by local tools, not model self-report.
-
-#### 3. Focused repair loops
-
-Coverage and mutation repair can run in focused later-stage rounds so the model receives smaller, more specific repair packets instead of generic “try again” prompts.
-
-#### 4. Session analysis is part of optimization
-
-OpenCode session data is useful operational telemetry, not just debugging noise. UTA now treats session assessment as a first-class workflow tuning input.
+**Session analysis is a tuning input.** Bounded, sanitized session diagnostics
+are operational telemetry for workflow optimisation, not just debugging noise.
 
 ## Assessment and Run Comparison
 
-`uta assess` reads OpenCode session data directly from `opencode.db` and reports:
+`uta assess` is the post-run consumer of the harness's optional offline
+diagnostics capability. UTA never reads provider storage or raw session rows: it
+supplies neutral durable session references and renders what the adapter returns.
 
-- token usage
-- cache-read pressure
-- tool-call volume
-- text/reasoning verbosity
-- top expensive steps
-- side-by-side comparisons against a baseline session
+It reports exact token usage and model buckets when every requested session is
+available, bounded duration, tool-call, patch and sanitized signal counts,
+explicit `unsupported`, `unavailable`, `mixed` and `truncated` states, and
+side-by-side deltas against a baseline.
 
-This is meant for:
+Public JSON never includes raw prompts, reasoning, commands, tool input/output,
+absolute paths, or provider database rows. When any requested session cannot be
+diagnosed, aggregate values are `null` rather than partial totals.
 
-- model comparisons
-- prompt/workflow regression checks
-- spotting verbosity or exploration drift
-- deciding whether an optimization actually reduced token usage
+This supports model comparisons, prompt/workflow regression checks, and deciding
+whether an optimisation actually reduced token usage.
 
 ## Documentation Expectations
 
-When workflow structure or user-facing behavior changes:
+When workflow structure or user-facing behaviour changes:
 
 - update `README.md`
 - update this architecture document
 - add or update tests
 
-This keeps the repo usable both for daily operation and for prompt/workflow optimization work.
+This keeps the repo usable both for daily operation and for prompt/workflow
+optimisation work.

@@ -22,15 +22,15 @@ def _init_repo(path: Path, remote: str):
 
 def test_discover_repo_entries_preserves_api_subdirectories(tmp_path):
     module = _load_script()
-    source_root = tmp_path / "services"
-    _init_repo(source_root / "core-repo", "git@example:services/core-repo.git")
-    _init_repo(source_root / "api" / "order-api", "git@example:services/api/order-api.git")
+    source_root = tmp_path / "wms"
+    _init_repo(source_root / "core-repo", "git@example:wms/core-repo.git")
+    _init_repo(source_root / "api" / "order-api", "git@example:wms/api/order-api.git")
 
     entries = module.discover_repo_entries([str(source_root)])
 
     assert [(entry.group, entry.relative_path, entry.git_url) for entry in entries] == [
-        ("services", "api/order-api", "git@example:services/api/order-api.git"),
-        ("services", "core-repo", "git@example:services/core-repo.git"),
+        ("wms", "api/order-api", "git@example:wms/api/order-api.git"),
+        ("wms", "core-repo", "git@example:wms/core-repo.git"),
     ]
 
 
@@ -38,10 +38,10 @@ def test_repo_list_round_trip_and_destination_mapping(tmp_path):
     module = _load_script()
     entries = [
         module.RepoEntry(
-            group="service_a",
+            group="platform",
             relative_path="api/product-api",
-            git_url="git@example:service_a/api/product-api.git",
-            source_path="/Users/example/service_a/api/product-api",
+            git_url="git@example:platform/api/product-api.git",
+            source_path="/Users/example/platform/api/product-api",
         )
     ]
     repo_list = tmp_path / "repo.txt"
@@ -51,7 +51,7 @@ def test_repo_list_round_trip_and_destination_mapping(tmp_path):
 
     assert loaded == entries
     assert module.destination_for_entry(tmp_path / "projectdir", loaded[0]) == (
-        tmp_path / "projectdir" / "service_a" / "api" / "product-api"
+        tmp_path / "projectdir" / "platform" / "api" / "product-api"
     )
 
 
@@ -59,23 +59,23 @@ def test_api_named_repo_destinations_are_grouped_under_api_dir(tmp_path):
     module = _load_script()
 
     api_entry = module.RepoEntry(
-        group="services",
-        relative_path="example-services-core-api",
-        git_url="git@example:services/example-services-core-api.git",
-        source_path="/Users/example/services/example-services-core-api",
+        group="wms",
+        relative_path="sample-wms-core-api",
+        git_url="git@example:wms/sample-wms-core-api.git",
+        source_path="/Users/example/wms/sample-wms-core-api",
     )
     non_api_entry = module.RepoEntry(
-        group="services",
+        group="wms",
         relative_path="sample-core",
-        git_url="git@example:services/sample-core.git",
-        source_path="/Users/example/services/sample-core",
+        git_url="git@example:wms/sample-core.git",
+        source_path="/Users/example/wms/sample-core",
     )
 
     assert module.destination_for_entry(tmp_path / "projectdir", api_entry) == (
-        tmp_path / "projectdir" / "services" / "api" / "example-services-core-api"
+        tmp_path / "projectdir" / "wms" / "api" / "sample-wms-core-api"
     )
     assert module.destination_for_entry(tmp_path / "projectdir", non_api_entry) == (
-        tmp_path / "projectdir" / "services" / "sample-core"
+        tmp_path / "projectdir" / "wms" / "sample-core"
     )
 
 
@@ -83,7 +83,7 @@ def test_parse_repo_list_rejects_malformed_lines():
     module = _load_script()
 
     try:
-        module.parse_repo_list_line("services\tonly-two-fields", line_no=7)
+        module.parse_repo_list_line("wms\tonly-two-fields", line_no=7)
     except ValueError as exc:
         assert "line 7" in str(exc)
     else:
@@ -94,13 +94,13 @@ def test_api_repo_detection_for_manifest_entries():
     module = _load_script()
 
     assert module.entry_looks_like_api_repo(
-        module.RepoEntry("services", "api/order-api", "git@example:services/api/order-api.git", "/services/api/order-api")
+        module.RepoEntry("wms", "api/order-api", "git@example:wms/api/order-api.git", "/wms/api/order-api")
     )
     assert module.entry_looks_like_api_repo(
-        module.RepoEntry("service_a", "product-openapi", "git@example:service_a/product-openapi.git", "/service_a/product-openapi")
+        module.RepoEntry("platform", "product-openapi", "git@example:platform/product-openapi.git", "/platform/product-openapi")
     )
     assert not module.entry_looks_like_api_repo(
-        module.RepoEntry("service_b", "route-core", "git@example:service_b/route-core.git", "/service_b/route-core")
+        module.RepoEntry("tms", "route-core", "git@example:tms/route-core.git", "/tms/route-core")
     )
 
 
@@ -128,10 +128,10 @@ def test_existing_repo_list_with_api_repo_skips_maven_without_settings(tmp_path)
         repo_list,
         [
             module.RepoEntry(
-                group="services",
+                group="wms",
                 relative_path="api/order-api",
-                git_url="git@example:services/api/order-api.git",
-                source_path="/services/api/order-api",
+                git_url="git@example:wms/api/order-api.git",
+                source_path="/wms/api/order-api",
             )
         ],
     )
@@ -158,10 +158,10 @@ def test_existing_repo_list_reports_missing_repos(tmp_path):
         repo_list,
         [
             module.RepoEntry(
-                group="services",
+                group="wms",
                 relative_path="missing-core",
-                git_url="git@example:services/missing-core.git",
-                source_path="/services/missing-core",
+                git_url="git@example:wms/missing-core.git",
+                source_path="/wms/missing-core",
             )
         ],
     )
@@ -185,8 +185,8 @@ def test_existing_repo_list_reports_missing_repos(tmp_path):
 
 def test_scan_only_generates_repo_list_without_requiring_maven_settings(tmp_path):
     module = _load_script()
-    source_root = tmp_path / "services"
-    _init_repo(source_root / "service-core", "git@example:services/service-core.git")
+    source_root = tmp_path / "wms"
+    _init_repo(source_root / "service-core", "git@example:wms/service-core.git")
     repo_list = tmp_path / "repo.txt"
 
     exit_code = module.main([
@@ -201,7 +201,7 @@ def test_scan_only_generates_repo_list_without_requiring_maven_settings(tmp_path
 
     assert exit_code == 0
     loaded = module.read_repo_list(repo_list)
-    assert [(entry.group, entry.relative_path) for entry in loaded] == [("services", "service-core")]
+    assert [(entry.group, entry.relative_path) for entry in loaded] == [("wms", "service-core")]
 
 
 def test_internal_api_jar_filter_requires_group_and_api_keyword(tmp_path):

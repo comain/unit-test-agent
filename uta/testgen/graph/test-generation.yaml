@@ -1,0 +1,56 @@
+# The test-generation flow.
+#
+# Prepare the workspace, validate its baseline, select targets, then loop over
+# target batches: execute the nested `generation-cycle.yaml`, then deliver.
+# Finalization runs when the target list is exhausted. Each language backend
+# owns concrete mechanics behind the nested language-neutral phases.
+#
+# This was 56 lines of StateGraph wiring in `workflow.py`. The shape is data
+# now, so reordering a step or adding a branch is an edit to this file; the
+# steps themselves stay in `nodes.py` and are registered in `workflow.py`.
+name: test-generation
+
+nodes:
+  - prepare_workspace
+  - baseline_validate
+  - select_targets
+  - prepare_context
+  - select_next_target
+  - run_generation_cycle
+  - deliver_target
+  - finalize
+
+entry: prepare_workspace
+
+edges:
+  - [prepare_workspace, baseline_validate]
+  - [select_targets, prepare_context]
+  - [prepare_context, select_next_target]
+  # The loop: each delivered target goes back for the next one.
+  - [deliver_target, select_next_target]
+  - [finalize, __end__]
+
+branches:
+  # A repository that does not compile before we touch it cannot tell us
+  # whether anything we generate compiles either, so nothing is generated.
+  - from: baseline_validate
+    selector: baseline_outcome
+    routes:
+      error: __end__
+      continue: select_targets
+
+  # Out of targets: push what was committed.
+  - from: select_next_target
+    selector: next_target_outcome
+    routes:
+      end: finalize
+      generate: run_generation_cycle
+
+  # Stopping early -- a budget cap, a quarantine, an unrecoverable failure --
+  # skips the push deliberately: whatever is committed on the branch stays
+  # there, and is not pushed as though the run had finished.
+  - from: run_generation_cycle
+    selector: generation_outcome
+    routes:
+      end: __end__
+      continue: deliver_target
